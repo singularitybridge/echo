@@ -31,6 +31,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [generatingSceneIds, setGeneratingSceneIds] = useState<Set<string>>(new Set());
   const [characterRefs, setCharacterRefs] = useState<GeneratedImage[]>([]);
+  const [combinedRefs, setCombinedRefs] = useState<GeneratedImage[]>([]); // Assets + character refs
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [evaluatingSceneIds, setEvaluatingSceneIds] = useState<Set<string>>(new Set());
@@ -152,6 +153,35 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     loadCharacterRefs();
   }, [projectId, project?.aspectRatio]);
+
+  // Load combined references (assets + character refs) when scene changes
+  useEffect(() => {
+    const loadCombinedRefs = async () => {
+      if (!project || !selectedSceneId) {
+        setCombinedRefs(characterRefs);
+        return;
+      }
+
+      const selectedScene = project.scenes.find(s => s.id === selectedSceneId);
+      if (!selectedScene) {
+        setCombinedRefs(characterRefs);
+        return;
+      }
+
+      // Load attached assets for this scene
+      let assetRefs: GeneratedImage[] = [];
+      if (selectedScene.attachedAssets && selectedScene.attachedAssets.length > 0) {
+        assetRefs = await loadAttachedAssetsAsRefs(selectedScene.attachedAssets, project.id);
+      }
+
+      // Combine assets (priority) with character refs (fallback)
+      const combined = assetRefs.length > 0 ? assetRefs : characterRefs;
+      setCombinedRefs(combined);
+      console.log(`Combined refs for scene "${selectedScene.title}": ${assetRefs.length} assets + ${characterRefs.length} character refs = ${combined.length} total`);
+    };
+
+    loadCombinedRefs();
+  }, [project, selectedSceneId, characterRefs]);
 
   // Helper function to load attached assets as GeneratedImage[]
   const loadAttachedAssetsAsRefs = async (
@@ -1287,7 +1317,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               <button
                 onClick={() => handleGenerateScene(selectedScene.id)}
                 disabled={
-                  characterRefs.length === 0 ||
+                  combinedRefs.length === 0 ||
                   generatingSceneIds.has(selectedScene.id)
                 }
                 className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
@@ -1425,7 +1455,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         <ReferenceSelectionModal
           isOpen={showRefSelectModal}
           onClose={() => setShowRefSelectModal(false)}
-          characterRefs={characterRefs.map((ref) => ref.objectUrl)}
+          characterRefs={combinedRefs.map((ref) => ref.objectUrl)}
           selectedReference={
             selectedScene.referenceMode ??
             (scenes.findIndex((s) => s.id === selectedScene.id) === 0 ? 1 : 'previous')
