@@ -144,8 +144,21 @@ export const generateVideo = async (
   }
 
   console.log('Submitting video generation request...', generateVideoPayload);
-  let operation = await ai.models.generateVideos(generateVideoPayload);
-  console.log('Video generation operation started:', operation);
+
+  let operation;
+  try {
+    operation = await ai.models.generateVideos(generateVideoPayload);
+    console.log('Video generation operation started:', operation);
+  } catch (error) {
+    console.error('Failed to submit video generation request:', error);
+    console.error('Request payload:', JSON.stringify(generateVideoPayload, null, 2));
+
+    // Provide detailed error information
+    if (error instanceof Error) {
+      throw new Error(`Video generation API call failed: ${error.message}`);
+    }
+    throw new Error('Video generation API call failed with unknown error');
+  }
 
   while (!operation.done) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
@@ -169,7 +182,13 @@ export const generateVideo = async (
     const url = decodeURIComponent(videoObject.uri);
     console.log('Fetching video from:', url);
 
-    const res = await fetch(`${url}&key=${apiKey}`);
+    let res;
+    try {
+      res = await fetch(`${url}&key=${apiKey}`);
+    } catch (error) {
+      console.error('Network error while fetching generated video:', error);
+      throw new Error(`Network error fetching video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     if (!res.ok) {
       throw new Error(`Failed to fetch video: ${res.status} ${res.statusText}`);

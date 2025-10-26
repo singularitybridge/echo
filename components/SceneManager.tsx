@@ -20,6 +20,7 @@ import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { PlaybackBar } from './PlaybackBar';
 import AssetPickerModal from './assets/AssetPickerModal';
+import { AssetLoader } from '../utils/assetLoader';
 
 interface SceneManagerProps {
   projectId: string;
@@ -107,19 +108,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     if (!projectId || !project) return;
 
     const loadCharacterRefs = async () => {
+      const aspectRatio = (project.aspectRatio ?? AspectRatio.PORTRAIT) === AspectRatio.PORTRAIT ? '9:16' : '16:9';
+
+      // Use unified AssetLoader
+      const legacyRefs = await AssetLoader.loadLegacyCharacterRefs(projectId, aspectRatio);
+
+      // Convert to full GeneratedImage format with blob data for video generation
       const refs: GeneratedImage[] = [];
-      const aspectRatioKey = (project.aspectRatio ?? AspectRatio.PORTRAIT) === AspectRatio.PORTRAIT ? 'portrait' : 'landscape';
-
-      for (let i = 1; i <= 10; i++) {
+      for (const ref of legacyRefs) {
         try {
-          // Try aspect-ratio-specific filename first
-          let response = await fetch(`/generated-refs/${projectId}/character-ref-${aspectRatioKey}-${i}.png`);
-
-          // Fall back to old naming for backwards compatibility (treat as landscape)
-          if (!response.ok && aspectRatioKey === 'landscape') {
-            response = await fetch(`/generated-refs/${projectId}/character-ref-${i}.png`);
-          }
-
+          const response = await fetch(ref.objectUrl);
           if (response.ok) {
             const blob = await response.blob();
             const objectUrl = URL.createObjectURL(blob);
@@ -143,12 +141,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             });
           }
         } catch (err) {
-          console.log(`Character ref ${aspectRatioKey}-${i} not found`);
+          console.log(`Failed to load legacy ref: ${ref.objectUrl}`, err);
         }
       }
 
       setCharacterRefs(refs);
-      console.log(`Loaded ${refs.length} ${aspectRatioKey} character reference images`);
+      console.log(`Loaded ${refs.length} ${aspectRatio} character reference images`);
     };
 
     loadCharacterRefs();
@@ -168,83 +166,51 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         return;
       }
 
-      // Load attached assets for this scene
-      let assetRefs: GeneratedImage[] = [];
-      if (selectedScene.attachedAssets && selectedScene.attachedAssets.length > 0) {
-        assetRefs = await loadAttachedAssetsAsRefs(selectedScene.attachedAssets, project.id);
+      // Load ALL project assets for reference picker (not just attached ones)
+      // This allows users to select any character variation/pose as the starting frame
+      const allProjectAssets = await AssetLoader.loadProjectAssets(project.id);
+      const assetGeneratedImages = AssetLoader.assetsToAssetReferences(allProjectAssets);
+
+      // Convert AssetLoader GeneratedImage format to full format with blob data for video generation
+      const assetRefs: GeneratedImage[] = [];
+      for (const assetImg of assetGeneratedImages) {
+        try {
+          const response = await fetch(assetImg.objectUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+
+            const reader = new FileReader();
+            const base64Promise = new Promise<string>((resolve) => {
+              reader.onloadend = () => {
+                const base64 = reader.result as string;
+                resolve(base64.split(',')[1]);
+              };
+              reader.readAsDataURL(blob);
+            });
+
+            const imageBytes = await base64Promise;
+
+            assetRefs.push({
+              imageBytes,
+              mimeType: blob.type || 'image/png',
+              objectUrl,
+              blob,
+            });
+          }
+        } catch (err) {
+          console.log(`Failed to load asset ref: ${assetImg.objectUrl}`, err);
+        }
       }
 
-      // Combine assets (priority) with character refs (fallback)
+      // Combine all project assets (priority) with legacy character refs (fallback)
       const combined = assetRefs.length > 0 ? assetRefs : characterRefs;
       setCombinedRefs(combined);
-      console.log(`Combined refs for scene "${selectedScene.title}": ${assetRefs.length} assets + ${characterRefs.length} character refs = ${combined.length} total`);
+      console.log(`Available assets for scene "${selectedScene.title}": ${assetRefs.length} project assets + ${characterRefs.length} legacy refs = ${combined.length} total`);
     };
 
     loadCombinedRefs();
   }, [project, selectedSceneId, characterRefs]);
-
-  // Helper function to load attached assets as GeneratedImage[]
-  const loadAttachedAssetsAsRefs = async (
-    attachments: SceneAssetAttachment[],
-    projectId: string
-  ): Promise<GeneratedImage[]> => {
-    if (!attachments || attachments.length === 0) {
-      return [];
-    }
-
-    const refs: GeneratedImage[] = [];
-
-    // Sort attachments by order to maintain priority
-    const sortedAttachments = [...attachments].sort((a, b) => a.order - b.order);
-
-    for (const attachment of sortedAttachments) {
-      try {
-        // Fetch asset metadata to get imageUrl
-        const assetResponse = await fetch(`/api/assets/${attachment.assetId}?projectId=${projectId}`);
-        if (!assetResponse.ok) {
-          console.warn(`Failed to fetch asset ${attachment.assetId}`);
-          continue;
-        }
-
-        const asset = await assetResponse.json();
-
-        // Fetch the actual image
-        const imageResponse = await fetch(asset.imageUrl);
-        if (!imageResponse.ok) {
-          console.warn(`Failed to fetch image for asset ${attachment.assetId}`);
-          continue;
-        }
-
-        const blob = await imageResponse.blob();
-        const objectUrl = URL.createObjectURL(blob);
-
-        // Convert blob to base64
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onloadend = () => {
-            const base64 = reader.result as string;
-            resolve(base64.split(',')[1]);
-          };
-          reader.readAsDataURL(blob);
-        });
-
-        const imageBytes = await base64Promise;
-
-        refs.push({
-          imageBytes,
-          mimeType: blob.type || 'image/png',
-          objectUrl,
-          blob,
-        });
-
-        console.log(`Loaded asset ${asset.name} as reference (role: ${attachment.role})`);
-      } catch (err) {
-        console.error(`Error loading asset ${attachment.assetId}:`, err);
-      }
-    }
-
-    return refs;
-  };
 
   // Note: Project data persistence removed from localStorage due to quota limits.
   // Videos and evaluations are now stored server-side via API routes.
@@ -550,7 +516,42 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       let assetRefs: GeneratedImage[] = [];
       if (scene.attachedAssets && scene.attachedAssets.length > 0) {
         console.log(`Loading ${scene.attachedAssets.length} attached assets for scene "${scene.title}"`);
-        assetRefs = await loadAttachedAssetsAsRefs(scene.attachedAssets, project.id);
+
+        // Use unified AssetLoader to load scene assets
+        const attachedAssetIds = scene.attachedAssets.map(a => a.assetId);
+        const assetReferences = await AssetLoader.loadSceneAssets(project.id, attachedAssetIds);
+
+        // Convert to full GeneratedImage format with blob data
+        for (const assetRef of assetReferences) {
+          try {
+            const response = await fetch(assetRef.objectUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              const objectUrl = URL.createObjectURL(blob);
+
+              const reader = new FileReader();
+              const base64Promise = new Promise<string>((resolve) => {
+                reader.onloadend = () => {
+                  const base64 = reader.result as string;
+                  resolve(base64.split(',')[1]);
+                };
+                reader.readAsDataURL(blob);
+              });
+
+              const imageBytes = await base64Promise;
+
+              assetRefs.push({
+                imageBytes,
+                mimeType: blob.type || 'image/png',
+                objectUrl,
+                blob,
+              });
+            }
+          } catch (err) {
+            console.log(`Failed to load asset ref: ${assetRef.objectUrl}`, err);
+          }
+        }
+
         console.log(`Loaded ${assetRefs.length} asset references`);
       }
 
@@ -956,8 +957,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             let thumbnailUrl: string | undefined;
             if (isReference && typeof currentRef === 'number') {
               const refIndex = currentRef - 1;
-              if (characterRefs[refIndex]) {
-                thumbnailUrl = characterRefs[refIndex].objectUrl;
+              if (combinedRefs[refIndex]) {
+                thumbnailUrl = combinedRefs[refIndex].objectUrl;
               }
             } else if (!isReference && index > 0) {
               const previousScene = scenes[index - 1];
@@ -1006,7 +1007,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                         {isReference ? (
                           <ImageIcon
                             className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-indigo-500'}`}
-                            title={`Reference Image ${currentRef}`}
+                            title={`Asset ${currentRef}`}
                           />
                         ) : (
                           <Film
@@ -1177,10 +1178,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     // Get the image URL
                     let imageUrl: string | undefined;
                     if (!isPrevious && typeof currentRef === 'number') {
-                      // Use character reference
+                      // Use asset reference
                       const refIndex = currentRef - 1;
-                      if (characterRefs[refIndex]) {
-                        imageUrl = characterRefs[refIndex].objectUrl;
+                      if (combinedRefs[refIndex]) {
+                        imageUrl = combinedRefs[refIndex].objectUrl;
                       }
                     } else if (isPrevious && sceneIndex > 0) {
                       // Use previous scene's last frame if available
@@ -1220,7 +1221,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                             ) : (
                               <>
                                 <ImageIcon size={16} className="text-indigo-600 flex-shrink-0" />
-                                <span className="text-sm font-medium text-gray-900">Reference {currentRef}</span>
+                                <span className="text-sm font-medium text-gray-900">Asset {currentRef}</span>
                               </>
                             )}
                           </div>
@@ -1235,28 +1236,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 </button>
               </div>
 
-            {/* Attach Assets Button */}
-            <div className="mb-3">
-              <label className="block text-xs font-medium text-gray-700 mb-2">Scene Assets</label>
-              <button
-                onClick={() => setShowAssetPicker(true)}
-                className="w-full bg-white border-2 border-gray-200 hover:border-indigo-300 rounded-lg p-3 transition-all group text-left flex items-center gap-3"
-              >
-                <div className="w-10 h-10 flex-shrink-0 rounded bg-indigo-50 flex items-center justify-center">
-                  <Paperclip className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium text-gray-900">
-                      {selectedScene.attachedAssets?.length || 0} Assets
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 group-hover:text-indigo-600 transition-colors">
-                    Click to manage assets
-                  </div>
-                </div>
-              </button>
-            </div>
             </div>
 
             {/* Settings Toggle */}
@@ -1441,7 +1420,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
       </div>
 
-      {/* Reference Images Modal */}
+      {/* Character Assets Modal */}
       {showRefsModal && (
         <CharacterRefsModal
           projectId={projectId}

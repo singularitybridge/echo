@@ -41,7 +41,11 @@ export async function POST(request: NextRequest) {
     // Return URL to the saved image (relative to public directory)
     const imageUrl = `/assets/${projectId}/${type}/${assetId}.png`;
 
-    return NextResponse.json({ url: imageUrl });
+    return NextResponse.json({
+      url: imageUrl,
+      imageUrl: imageUrl,
+      thumbnailUrl: imageUrl // Use same URL for thumbnail for now
+    });
   } catch (error) {
     console.error('Error saving asset image:', error);
     return NextResponse.json(

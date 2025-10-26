@@ -7,13 +7,18 @@ import { useRouter } from 'next/navigation';
 import { Film, Video as VideoIcon, Package, Plus, User } from 'lucide-react';
 import { Project } from '../types/project';
 import { StoryDraft } from '../types/story-creation';
+import { Asset } from '../types/asset';
 import CreateStoryModal from './CreateStoryModal';
+import AssetGenerationFlowModal from './AssetGenerationFlowModal';
 
 const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAssetGenerationModal, setShowAssetGenerationModal] = useState(false);
+  const [currentStoryDraft, setCurrentStoryDraft] = useState<StoryDraft | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const router = useRouter();
 
@@ -71,39 +76,36 @@ const ProjectList: React.FC = () => {
 
   const handleStoryCreated = async (story: StoryDraft) => {
     setShowCreateModal(false);
+    // Generate project ID once to be used consistently
+    const projectId = `generated-${Date.now()}`;
+    setCurrentProjectId(projectId);
+    setCurrentStoryDraft(story);
+    setShowAssetGenerationModal(true);
+  };
+
+  const handleAssetsGenerated = async (assets: Asset[]) => {
+    if (!currentStoryDraft || !currentProjectId) {
+      console.error('No story draft or project ID available');
+      return;
+    }
+
+    setShowAssetGenerationModal(false);
     setIsCreatingProject(true);
 
     try {
-      // Step 1: Generate character reference images
-      console.log('Generating character references for:', story.projectMetadata.character);
+      // Use the project ID that was generated earlier
+      const projectId = currentProjectId;
 
-      const refResponse = await fetch('/api/generate-character-refs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: `generated-${Date.now()}`,
-          characterDescription: story.projectMetadata.character,
-          aspectRatio: story.projectMetadata.aspectRatio,
-        }),
-      });
-
-      if (!refResponse.ok) {
-        throw new Error('Failed to generate character references');
-      }
-
-      const refData = await refResponse.json();
-      const projectId = refData.projectId;
-
-      // Step 2: Create project from story draft
-      console.log('Creating project from story draft...');
+      // Create project from story draft with linked assets
+      console.log('Creating project from story draft with assets...');
 
       const project: Project = {
-        ...story.projectMetadata,
+        ...currentStoryDraft.projectMetadata,
         id: projectId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        scenes: story.scenes,
-        generationMetadata: story.generationMetadata, // Preserve generation metadata
+        scenes: currentStoryDraft.scenes,
+        generationMetadata: currentStoryDraft.generationMetadata,
       };
 
       const projectResponse = await fetch('/api/projects', {
@@ -117,13 +119,17 @@ const ProjectList: React.FC = () => {
       }
 
       console.log('Project created successfully:', projectId);
+      console.log('Assets linked to scenes:', assets.length);
 
-      // Step 3: Navigate to the new project
+      // Navigate to the new project
       router.push(`/projects/${projectId}`);
     } catch (error) {
       console.error('Error creating project from story:', error);
       alert('Failed to create project. Please try again.');
       setIsCreatingProject(false);
+    } finally {
+      setCurrentStoryDraft(null);
+      setCurrentProjectId(null);
     }
   };
 
@@ -316,6 +322,21 @@ const ProjectList: React.FC = () => {
         onStoryCreated={handleStoryCreated}
       />
 
+      {/* Asset Generation Modal */}
+      {currentStoryDraft && currentProjectId && (
+        <AssetGenerationFlowModal
+          isOpen={showAssetGenerationModal}
+          onClose={() => {
+            setShowAssetGenerationModal(false);
+            setCurrentStoryDraft(null);
+            setCurrentProjectId(null);
+          }}
+          storyDraft={currentStoryDraft}
+          projectId={currentProjectId}
+          onComplete={handleAssetsGenerated}
+        />
+      )}
+
       {/* Creating Story Loading Overlay */}
       {isCreatingProject && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -327,7 +348,7 @@ const ProjectList: React.FC = () => {
                   Creating Your Story
                 </h3>
                 <p className="text-sm text-gray-600">
-                  Generating character references and setting up your story...
+                  Setting up your story with generated assets...
                 </p>
               </div>
             </div>

@@ -138,28 +138,113 @@ export const generateCharacterReferences = async (
 };
 
 export interface EditImageParams {
-  originalDescription: string;
+  baseImageBlob?: Blob;
+  baseImageUrl?: string;
+  originalDescription?: string;
   editPrompt: string;
   aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 }
 
 /**
- * Edit an image by regenerating it with modifications
- * This combines the original description with the edit prompt to create a new image
+ * Edit an existing image using instruction-based image editing via fal.ai
  */
 export const editImage = async (
   params: EditImageParams,
 ): Promise<GeneratedImage> => {
   console.log('Starting image editing with params:', params);
 
-  // Combine original description with edit instructions
-  const combinedPrompt = `${params.originalDescription}. ${params.editPrompt}. High quality photorealistic, professional lighting.`;
+  // If we have a base image, use true image editing
+  if (params.baseImageBlob || params.baseImageUrl) {
+    return editImageWithFal(params);
+  }
 
-  console.log('Combined edit prompt:', combinedPrompt);
+  // Fallback: regenerate from text description
+  const combinedPrompt = `${params.originalDescription || ''}. ${params.editPrompt}. High quality photorealistic, professional lighting.`;
+  console.log('No base image provided, generating from text:', combinedPrompt);
 
-  // Generate new image based on combined prompt
   return generateImage({
     prompt: combinedPrompt,
     aspectRatio: params.aspectRatio || '16:9',
   });
 };
+
+/**
+ * Edit an image using fal.ai's image editing endpoint via server-side API
+ * Uses flux-pro/v1.1-ultra for high quality instruction-based editing
+ */
+async function editImageWithFal(
+  params: EditImageParams,
+): Promise<GeneratedImage> {
+  console.log('Using fal.ai image editing with base image (via API)');
+
+  // Convert blob to base64 data URL if provided
+  let imageDataUrl: string;
+
+  if (params.baseImageBlob) {
+    const reader = new FileReader();
+    const dataUrlPromise = new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        resolve(reader.result as string);
+      };
+      reader.onerror = reject;
+    });
+    reader.readAsDataURL(params.baseImageBlob);
+    imageDataUrl = await dataUrlPromise;
+  } else if (params.baseImageUrl) {
+    // Fetch image from URL and convert to data URL
+    const response = await fetch(params.baseImageUrl);
+    const blob = await response.blob();
+    const reader = new FileReader();
+    const dataUrlPromise = new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        resolve(reader.result as string);
+      };
+      reader.onerror = reject;
+    });
+    reader.readAsDataURL(blob);
+    imageDataUrl = await dataUrlPromise;
+  } else {
+    throw new Error('No base image provided for editing');
+  }
+
+  // Call our server-side API route instead of calling fal.ai directly
+  const response = await fetch('/api/edit-image', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      imageDataUrl,
+      editPrompt: params.editPrompt,
+      aspectRatio: params.aspectRatio || '16:9',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(`Image editing API error: ${errorData.error || response.status}`);
+  }
+
+  const result = await response.json();
+  console.log('Image edit API response received');
+
+  const imageBytes = result.imageBytes;
+  const mimeType = result.mimeType || 'image/png';
+
+  // Convert base64 to blob
+  const byteString = atob(imageBytes);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  const blob = new Blob([ab], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+
+  return {
+    imageBytes,
+    mimeType,
+    objectUrl,
+    blob,
+  };
+}

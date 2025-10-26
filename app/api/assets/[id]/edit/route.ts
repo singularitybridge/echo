@@ -99,7 +99,12 @@ export async function POST(
     // Generate edited image using AI
     console.log('Editing asset:', asset.id, 'with prompt:', editPrompt);
 
+    // Construct full URL to the asset image
+    const baseImageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3039'}${asset.imageUrl}`;
+    console.log('Using base image URL:', baseImageUrl);
+
     const editedImage = await editImage({
+      baseImageUrl,  // Pass the actual image to edit
       originalDescription: asset.description || asset.generationPrompt || asset.name,
       editPrompt: editPrompt.trim(),
       aspectRatio: asset.aspectRatio === '16:9' ? '16:9' : '9:16',

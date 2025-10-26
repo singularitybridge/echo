@@ -50,7 +50,7 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1">
           <p className="text-sm text-gray-600 mb-6">
-            Choose which reference image or previous shot to use as the starting frame for this scene
+            Choose which asset or previous shot to use as the starting frame for this scene
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -85,7 +85,7 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
               </button>
             )}
 
-            {/* Reference Images */}
+            {/* Character Assets */}
             {characterRefs.map((refUrl, index) => (
               <button
                 key={index}
@@ -98,12 +98,12 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
               >
                 <img
                   src={refUrl}
-                  alt={`Reference ${index + 1}`}
+                  alt={`Asset ${index + 1}`}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                   <span className="text-white text-sm font-medium">
-                    Reference Image {index + 1}
+                    Asset {index + 1}
                   </span>
                 </div>
                 {selectedReference === index + 1 && (
@@ -124,7 +124,7 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
         <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-600">
             <ImageIcon size={16} className="inline mr-1" />
-            {characterRefs.length} reference{characterRefs.length !== 1 ? 's' : ''} available
+            {characterRefs.length} asset{characterRefs.length !== 1 ? 's' : ''} available
           </div>
           <button
             onClick={onClose}
