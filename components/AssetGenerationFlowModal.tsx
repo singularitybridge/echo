@@ -141,7 +141,7 @@ export default function AssetGenerationFlowModal({
 
   /**
    * Generate pose variations based on selected design and scene analysis
-   * Uses image editing to maintain visual consistency with selected design
+   * Uses fresh image generation with full character description to maintain consistency
    */
   async function generatePoseOptions() {
     setGeneratingPoses(true);
@@ -153,29 +153,30 @@ export default function AssetGenerationFlowModal({
         return;
       }
 
+      const characterDesc = storyDraft.projectMetadata.character;
       const aspectRatio = storyDraft.projectMetadata.aspectRatio;
 
       // Analyze scenes to determine needed emotions/poses
       const sceneEmotions = analyzeSceneEmotions(storyDraft.scenes);
 
-      // Generate poses for each emotion using image editing
+      // Generate poses for each emotion using fresh image generation
+      // This ensures character consistency by always including the full character description
       const poses = await Promise.all(
         sceneEmotions.map(async (emotion, index) => {
-          // Use image editing to modify the selected design with the target emotion/pose
-          const editPrompt = `Change the character's expression and pose to show ${emotion.description}. ${emotion.pose}. Maintain the exact same character appearance, clothing, and visual style.`;
+          // Build prompt with full character description + emotion + pose
+          const prompt = `Portrait of ${characterDesc}, ${emotion.description}, ${emotion.pose}, high quality photorealistic, professional photography`;
 
           console.log(`Generating pose ${index + 1}/${sceneEmotions.length}: ${emotion.name}`);
-          console.log('Edit prompt:', editPrompt);
+          console.log('Generation prompt:', prompt);
 
-          const image = await editImage({
-            baseImageBlob: selectedDesignOption.imageBlob,
-            editPrompt,
+          const image = await generateImage({
+            prompt,
             aspectRatio,
           });
 
           return {
             id: `pose-${index}`,
-            prompt: editPrompt,
+            prompt,
             imageBlob: image.blob,
             imageUrl: URL.createObjectURL(image.blob),
             emotion: emotion.name,
@@ -341,7 +342,7 @@ export default function AssetGenerationFlowModal({
   }
 
   /**
-   * Save single asset (image + metadata)
+   * Save single asset (image + metadata) using unified asset API
    */
   async function saveAsset(data: {
     projectId: string;
@@ -355,60 +356,38 @@ export default function AssetGenerationFlowModal({
     tags: string[];
     category: string;
   }): Promise<Asset> {
-    // Generate unique asset ID
-    const assetId = `asset-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-    // Save image via API
-    const formData = new FormData();
-    formData.append('projectId', data.projectId);
-    formData.append('assetId', assetId);
-    formData.append('type', data.type);
-    formData.append('image', data.imageBlob);
-
-    const imageResponse = await fetch('/api/assets/save-image', {
-      method: 'POST',
-      body: formData,
+    // Convert blob to base64
+    const reader = new FileReader();
+    const base64Promise = new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
     });
+    reader.readAsDataURL(data.imageBlob);
+    const imageBase64 = await base64Promise;
 
-    if (!imageResponse.ok) {
-      throw new Error('Failed to save asset image');
-    }
-
-    const { imageUrl, thumbnailUrl } = await imageResponse.json();
-
-    // Create asset metadata
-    const asset: Asset = {
-      id: assetId,
-      projectId: data.projectId,
-      type: data.type,
-      name: data.name,
-      description: data.description,
-      aspectRatio: data.aspectRatio,
-      imageUrl,
-      thumbnailUrl,
-      generationPrompt: data.prompt,
-      provider: data.provider,
-      tags: data.tags,
-      category: data.category,
-      editHistory: [],
-      relatedAssets: [],
-      usedInScenes: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    // Save metadata via API
-    const metadataResponse = await fetch('/api/assets', {
+    // Create asset via unified API
+    const response = await fetch('/api/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(asset),
+      body: JSON.stringify({
+        projectId: data.projectId,
+        type: data.type,
+        name: data.name,
+        description: data.description,
+        imageBase64: imageBase64,
+        aspectRatio: data.aspectRatio,
+        provider: data.provider,
+        generationPrompt: data.prompt,
+        tags: data.tags,
+      }),
     });
 
-    if (!metadataResponse.ok) {
-      throw new Error('Failed to save asset metadata');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create asset');
     }
 
-    return await metadataResponse.json();
+    return await response.json();
   }
 
   /**
