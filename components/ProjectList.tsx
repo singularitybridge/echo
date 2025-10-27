@@ -25,16 +25,41 @@ const ProjectList: React.FC = () => {
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        // Fetch all projects from API (merges runtime db + seed data)
-        const response = await fetch('/api/projects');
+        // Fetch all stories from new story storage API
+        const response = await fetch('/api/stories');
         if (!response.ok) {
-          console.error('Failed to load projects');
+          console.error('Failed to load stories');
           setLoading(false);
           return;
         }
 
         const data = await response.json();
-        const loadedProjects = data.projects || [];
+
+        // Convert story format to Project format for UI compatibility
+        const loadedProjects: Project[] = (data.stories || []).map((story: any) => ({
+          id: story.id,
+          title: story.title,
+          description: story.description,
+          type: story.type,
+          character: story.character,
+          aspectRatio: story.aspectRatio,
+          defaultModel: story.defaultModel,
+          defaultResolution: story.defaultResolution,
+          // Create empty scenes array with correct length for display
+          scenes: Array(story.sceneCount || 0).fill(null).map((_, i) => ({
+            id: `scene-${i + 1}`,
+            title: '',
+            duration: 8,
+            prompt: '',
+            cameraAngle: '',
+            voiceover: '',
+            generated: false,
+          })),
+          createdAt: story.createdAt,
+          updatedAt: story.updatedAt,
+          tags: story.tags || [],
+        }));
+
         setProjects(loadedProjects);
 
         // Load thumbnails for each project
@@ -42,7 +67,7 @@ const ProjectList: React.FC = () => {
 
         setLoading(false);
       } catch (err) {
-        console.error('Failed to load projects:', err);
+        console.error('Failed to load stories:', err);
         setLoading(false);
       }
     };
@@ -54,20 +79,38 @@ const ProjectList: React.FC = () => {
     const thumbnailMap: Record<string, string> = {};
 
     for (const project of projects) {
-      // Determine which reference image to use based on aspect ratio
+      try {
+        // Try to get assets from story storage API
+        const response = await fetch(`/api/stories/${project.id}/assets?type=character`);
+        if (response.ok) {
+          const data = await response.json();
+          const characterAssets = data.assets?.characters || [];
+
+          if (characterAssets.length > 0) {
+            // Use the first asset as thumbnail
+            const firstAsset = characterAssets[0];
+            const filename = firstAsset.split('/').pop();
+            thumbnailMap[project.id] = `/api/stories/${project.id}/assets/characters/${filename}`;
+            continue;
+          }
+        }
+      } catch (err) {
+        // Try fallback to old location
+      }
+
+      // Fallback: Check old generated-refs location
       const isPortrait = project.aspectRatio === '9:16';
-      const refPath = isPortrait
+      const oldRefPath = isPortrait
         ? `/generated-refs/${project.id}/character-ref-portrait-1.png`
         : `/generated-refs/${project.id}/character-ref-1.png`;
 
-      // Check if the reference image exists
       try {
-        const response = await fetch(refPath, { method: 'HEAD' });
+        const response = await fetch(oldRefPath, { method: 'HEAD' });
         if (response.ok) {
-          thumbnailMap[project.id] = refPath;
+          thumbnailMap[project.id] = oldRefPath;
         }
       } catch (err) {
-        // Thumbnail doesn't exist, will use fallback
+        // No thumbnail available
       }
     }
 
@@ -93,39 +136,86 @@ const ProjectList: React.FC = () => {
     setIsCreatingProject(true);
 
     try {
-      // Use the project ID that was generated earlier
-      const projectId = currentProjectId;
+      // Create story using new story storage API
+      console.log('Creating story with generated assets...');
 
-      // Create project from story draft with linked assets
-      console.log('Creating project from story draft with assets...');
-
-      const project: Project = {
-        ...currentStoryDraft.projectMetadata,
-        id: projectId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        scenes: currentStoryDraft.scenes,
-        generationMetadata: currentStoryDraft.generationMetadata,
+      const storyRequest = {
+        title: currentStoryDraft.projectMetadata.title,
+        description: currentStoryDraft.projectMetadata.description,
+        type: currentStoryDraft.projectMetadata.type,
+        character: currentStoryDraft.projectMetadata.character,
+        script: {
+          scenes: currentStoryDraft.scenes,
+        },
+        config: {
+          aspectRatio: currentStoryDraft.projectMetadata.aspectRatio,
+          defaultModel: currentStoryDraft.projectMetadata.defaultModel,
+          defaultResolution: currentStoryDraft.projectMetadata.defaultResolution,
+          characterReferences: [],
+        },
+        tags: currentStoryDraft.projectMetadata.tags || [],
       };
 
-      const projectResponse = await fetch('/api/projects', {
+      const storyResponse = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(project),
+        body: JSON.stringify(storyRequest),
       });
 
-      if (!projectResponse.ok) {
-        throw new Error('Failed to create project');
+      if (!storyResponse.ok) {
+        throw new Error('Failed to create story');
       }
 
-      console.log('Project created successfully:', projectId);
-      console.log('Assets linked to scenes:', assets.length);
+      const storyResult = await storyResponse.json();
+      const storyId = storyResult.story.metadata.id;
 
-      // Navigate to the new project
-      router.push(`/projects/${projectId}`);
+      console.log('Story created successfully:', storyId);
+
+      // Upload generated assets to story storage
+      if (assets && assets.length > 0) {
+        console.log('Uploading assets to story storage...');
+
+        for (const asset of assets) {
+          try {
+            // Convert blob URL to base64 data URL
+            const blobResponse = await fetch(asset.url);
+            const blob = await blobResponse.blob();
+
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            const assetResponse = await fetch(`/api/stories/${storyId}/assets`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'character',
+                filename: `character-ref-${asset.id}.png`,
+                imageBase64: base64,
+              }),
+            });
+
+            if (!assetResponse.ok) {
+              console.warn(`Failed to upload asset ${asset.id}`);
+            } else {
+              console.log(`Asset ${asset.id} uploaded successfully`);
+            }
+          } catch (err) {
+            console.warn(`Error uploading asset ${asset.id}:`, err);
+          }
+        }
+
+        console.log('Assets uploaded successfully');
+      }
+
+      // Navigate to the new story
+      router.push(`/projects/${storyId}`);
     } catch (error) {
-      console.error('Error creating project from story:', error);
-      alert('Failed to create project. Please try again.');
+      console.error('Error creating story:', error);
+      alert('Failed to create story. Please try again.');
       setIsCreatingProject(false);
     } finally {
       setCurrentStoryDraft(null);
