@@ -7,12 +7,17 @@ import { AspectRatio } from '../types';
 /**
  * Asset types for visual elements in the project
  */
-export type AssetType = 'character' | 'prop' | 'location';
+export type AssetType = 'character' | 'prop' | 'location' | 'background' | 'upload';
 
 /**
  * AI providers that can generate or edit assets
  */
-export type AssetProvider = 'gemini' | 'openai' | 'fal' | 'replicate' | 'uploaded';
+export type AssetProvider = 'fal-ai' | 'gemini' | 'upload';
+
+/**
+ * Image format options
+ */
+export type ImageFormat = 'png' | 'jpg' | 'webp';
 
 /**
  * Asset generation/edit status
@@ -27,49 +32,54 @@ export type AssetRole = 'character' | 'background' | 'prop';
 /**
  * History entry for asset edits
  */
-export interface AssetEdit {
-  id: string;
-  prompt: string;
-  provider: AssetProvider;
-  model: string;
+export interface AssetEditHistory {
   timestamp: Date;
-  previousVersionId: string;
-  imageUrl: string;
+  editPrompt: string;
+  previousAssetId: string;
 }
 
 /**
  * Main asset entity
  */
 export interface Asset {
+  // Core identification
   id: string;
-  projectId: string;
-  type: AssetType;
-  category?: string; // User-defined category (e.g., "Animals", "Furniture", "Outdoor Locations")
-  tags: string[]; // Searchable tags
+  url: string;
+  thumbnailUrl: string;
 
-  // Display info
+  // Classification
+  type: AssetType;
+  category: string;
+
+  // Content
   name: string;
   description: string;
 
-  // Image properties
-  aspectRatio: AspectRatio;
-  imageUrl: string;
-  thumbnailUrl: string;
-
   // Generation metadata
-  generationPrompt?: string;
   provider: AssetProvider;
-  model?: string;
+  generationPrompt?: string;
 
-  // Editing and versioning
-  originalAssetId?: string; // If this is an edited version
-  editHistory: AssetEdit[];
+  // Organization
+  projectId: string;
+  tags: string[];
 
-  // Relationships
-  relatedAssets: string[]; // IDs of related assets
-  usedInScenes: string[]; // Scene IDs where this asset is used
+  // Relations
+  relatedAssets: string[];
+  usedInScenes: string[];
 
-  // Timestamps
+  // Versioning
+  version: number;
+  parentAssetId: string | null;
+  editHistory: AssetEditHistory[];
+
+  // Technical details
+  format: ImageFormat;
+  aspectRatio: AspectRatio;
+  width: number;
+  height: number;
+  fileSize: number;
+
+  // Metadata
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,12 +131,8 @@ export interface AssetGenerationRequest {
 /**
  * Asset edit request
  */
-export interface AssetEditRequest {
-  assetId: string;
+export interface EditAssetRequest {
   editPrompt: string;
-  provider: AssetProvider;
-  model?: string;
-  saveAsNew?: boolean; // If true, creates new asset; if false, updates existing
 }
 
 /**
@@ -195,4 +201,57 @@ export interface AssetLibraryResponse {
     byType: Record<AssetType, number>;
     byProvider: Record<AssetProvider, number>;
   };
+}
+
+/**
+ * Asset metadata structure (stored in JSON)
+ */
+export interface AssetMetadata {
+  assets: {
+    [assetId: string]: Asset;
+  };
+  index: {
+    byProject: {
+      [projectId: string]: string[];
+    };
+    byType: {
+      [type: string]: string[];
+    };
+    byTag: {
+      [tag: string]: string[];
+    };
+  };
+}
+
+/**
+ * Asset creation request
+ */
+export interface CreateAssetRequest {
+  // Required
+  projectId: string;
+  type: AssetType;
+  name: string;
+
+  // Generation (one of these)
+  generationPrompt?: string;
+  aspectRatio?: AspectRatio;
+  provider?: AssetProvider;
+
+  // OR Upload
+  imageBase64?: string;
+  imageUrl?: string;
+
+  // Optional
+  description?: string;
+  tags?: string[];
+}
+
+/**
+ * Asset version history response
+ */
+export interface AssetVersionHistory {
+  current: Asset;
+  parent: Asset | null;
+  children: Asset[];
+  lineage: Asset[];
 }

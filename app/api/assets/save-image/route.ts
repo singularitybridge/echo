@@ -11,8 +11,13 @@ const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
 
 /**
  * POST - Save an asset image blob to the file system
+ *
+ * @deprecated This endpoint is deprecated. Use POST /api/assets with imageBase64 instead.
+ * This endpoint uses the old project-based folder structure and will be removed in a future version.
  */
 export async function POST(request: NextRequest) {
+  console.warn('[DEPRECATED] /api/assets/save-image endpoint is deprecated. Use POST /api/assets with imageBase64 instead.');
+
   try {
     const formData = await request.formData();
     const projectId = formData.get('projectId') as string;

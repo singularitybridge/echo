@@ -14,6 +14,7 @@ export interface GeneratedImage {
   mimeType: string;
   objectUrl: string;
   blob: Blob;
+  assetId?: string; // Asset ID for assets loaded from database
 }
 
 /**
@@ -193,22 +194,19 @@ async function editImageWithFal(
   } else if (params.baseImageUrl) {
     // Fetch image from URL and convert to data URL
     const response = await fetch(params.baseImageUrl);
-    const blob = await response.blob();
-    const reader = new FileReader();
-    const dataUrlPromise = new Promise<string>((resolve, reject) => {
-      reader.onload = () => {
-        resolve(reader.result as string);
-      };
-      reader.onerror = reject;
-    });
-    reader.readAsDataURL(blob);
-    imageDataUrl = await dataUrlPromise;
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
+    const mimeType = response.headers.get('content-type') || 'image/png';
+    imageDataUrl = `data:${mimeType};base64,${base64}`;
   } else {
     throw new Error('No base image provided for editing');
   }
 
   // Call our server-side API route instead of calling fal.ai directly
-  const response = await fetch('/api/edit-image', {
+  // Use full URL for server-side fetch calls
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3039';
+  const response = await fetch(`${baseUrl}/api/edit-image`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

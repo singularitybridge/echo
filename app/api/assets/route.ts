@@ -3,90 +3,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, readFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { existsSync } from 'fs';
-import type { Asset, AssetLibraryResponse, AssetFilters } from '@/types/asset';
-
-const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
-const ASSETS_METADATA_DIR = join(process.cwd(), 'data', 'assets');
-
-/**
- * Get the path to the assets metadata file for a project
- */
-function getMetadataPath(projectId: string): string {
-  return join(ASSETS_METADATA_DIR, `${projectId}.json`);
-}
-
-/**
- * Load assets metadata for a project
- */
-async function loadAssets(projectId: string): Promise<Asset[]> {
-  const metadataPath = getMetadataPath(projectId);
-
-  if (!existsSync(metadataPath)) {
-    return [];
-  }
-
-  const data = await readFile(metadataPath, 'utf-8');
-  return JSON.parse(data);
-}
+import type {
+  Asset,
+  AssetLibraryResponse,
+  AssetFilters,
+  CreateAssetRequest,
+} from '@/types/asset';
+import { generateAssetId } from '@/services/assetId';
+import {
+  saveAsset,
+  listAssets,
+  getAsset,
+} from '@/services/assetStorage';
+import {
+  generateThumbnail,
+  getImageDimensions,
+} from '@/services/thumbnailGenerator';
+import { generateImage } from '@/services/imageService';
 
 /**
- * Save assets metadata for a project
+ * Sort assets based on query parameters
  */
-async function saveAssets(projectId: string, assets: Asset[]): Promise<void> {
-  const metadataPath = getMetadataPath(projectId);
-
-  // Ensure metadata directory exists
-  if (!existsSync(ASSETS_METADATA_DIR)) {
-    await mkdir(ASSETS_METADATA_DIR, { recursive: true });
-  }
-
-  await writeFile(metadataPath, JSON.stringify(assets, null, 2), 'utf-8');
-}
-
-/**
- * Filter and sort assets based on query parameters
- */
-function filterAndSortAssets(
+function sortAssets(
   assets: Asset[],
-  filters?: AssetFilters,
   sortBy: string = 'createdAt',
   order: string = 'desc'
 ): Asset[] {
-  let filtered = [...assets];
+  const sorted = [...assets];
 
-  // Apply filters
-  if (filters) {
-    if (filters.type) {
-      filtered = filtered.filter(a => a.type === filters.type);
-    }
-    if (filters.category) {
-      filtered = filtered.filter(a => a.category === filters.category);
-    }
-    if (filters.provider) {
-      filtered = filtered.filter(a => a.provider === filters.provider);
-    }
-    if (filters.tags && filters.tags.length > 0) {
-      filtered = filtered.filter(a =>
-        filters.tags!.some(tag => a.tags.includes(tag))
-      );
-    }
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(a =>
-        a.name.toLowerCase().includes(searchLower) ||
-        a.description.toLowerCase().includes(searchLower)
-      );
-    }
-    if (filters.usedInScene) {
-      filtered = filtered.filter(a => a.usedInScenes.includes(filters.usedInScene!));
-    }
-  }
-
-  // Apply sorting
-  filtered.sort((a, b) => {
+  sorted.sort((a, b) => {
     let aVal: any;
     let bVal: any;
 
@@ -117,7 +63,7 @@ function filterAndSortAssets(
     }
   });
 
-  return filtered;
+  return sorted;
 }
 
 /**
@@ -135,41 +81,37 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Load all assets
-    const assets = await loadAssets(projectId);
-
     // Parse filters
     const filters: AssetFilters = {
+      projectId,
       type: searchParams.get('type') as any,
-      category: searchParams.get('category') || undefined,
-      provider: searchParams.get('provider') as any,
-      search: searchParams.get('search') || undefined,
-      usedInScene: searchParams.get('usedInScene') || undefined,
       tags: searchParams.getAll('tags'),
     };
+
+    // Load assets using the new storage service
+    const assets = await listAssets(filters);
 
     // Parse sorting
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const order = searchParams.get('order') || 'desc';
 
-    // Filter and sort
-    const filtered = filterAndSortAssets(assets, filters, sortBy, order);
+    // Sort
+    const sorted = sortAssets(assets, sortBy, order);
 
     // Parse pagination
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    const paginated = filtered.slice(startIndex, endIndex);
+    const paginated = sorted.slice(startIndex, endIndex);
 
     // Calculate summary
     const summary = {
       totalAssets: assets.length,
-      byType: {
-        character: assets.filter(a => a.type === 'character').length,
-        prop: assets.filter(a => a.type === 'prop').length,
-        location: assets.filter(a => a.type === 'location').length,
-      },
+      byType: assets.reduce((acc, asset) => {
+        acc[asset.type] = (acc[asset.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
       byProvider: assets.reduce((acc, asset) => {
         acc[asset.provider] = (acc[asset.provider] || 0) + 1;
         return acc;
@@ -181,7 +123,7 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         pageSize,
-        total: filtered.length,
+        total: sorted.length,
       },
       summary,
     };
@@ -201,37 +143,121 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const asset = await request.json() as Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>;
+    const body = (await request.json()) as CreateAssetRequest;
 
-    if (!asset.projectId || !asset.type || !asset.name) {
+    if (!body.projectId || !body.type || !body.name) {
       return NextResponse.json(
         { error: 'Missing required fields: projectId, type, name' },
         { status: 400 }
       );
     }
 
-    // Load existing assets
-    const assets = await loadAssets(asset.projectId);
+    let imageBuffer: Buffer;
+    let format: 'png' | 'jpg' | 'webp' = 'png';
 
-    // Create new asset with metadata
-    const newAsset: Asset = {
-      ...asset,
-      id: `asset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    // Generate or download image
+    if (body.generationPrompt && body.provider) {
+      // Generate new image using AI
+      console.log('Generating image for asset:', body.name);
+
+      const result = await generateImage({
+        prompt: body.generationPrompt,
+        aspectRatio: body.aspectRatio || '9:16',
+        provider: body.provider,
+      });
+
+      imageBuffer = Buffer.from(await result.blob.arrayBuffer());
+      format = 'png';
+    } else if (body.imageBase64) {
+      // Upload from base64
+      console.log('Uploading image from base64 for asset:', body.name);
+
+      const base64Data = body.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      imageBuffer = Buffer.from(base64Data, 'base64');
+
+      // Detect format from base64 prefix
+      if (body.imageBase64.includes('image/jpeg') || body.imageBase64.includes('image/jpg')) {
+        format = 'jpg';
+      } else if (body.imageBase64.includes('image/webp')) {
+        format = 'webp';
+      }
+    } else if (body.imageUrl) {
+      // Download from URL
+      console.log('Downloading image from URL for asset:', body.name);
+
+      const response = await fetch(body.imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download image from ${body.imageUrl}`);
+      }
+
+      imageBuffer = Buffer.from(await response.arrayBuffer());
+
+      // Detect format from URL
+      if (body.imageUrl.endsWith('.jpg') || body.imageUrl.endsWith('.jpeg')) {
+        format = 'jpg';
+      } else if (body.imageUrl.endsWith('.webp')) {
+        format = 'webp';
+      }
+    } else {
+      return NextResponse.json(
+        { error: 'Must provide generationPrompt, imageBase64, or imageUrl' },
+        { status: 400 }
+      );
+    }
+
+    // Get image dimensions
+    const { width, height } = await getImageDimensions(imageBuffer);
+
+    // Generate thumbnail
+    const thumbnailBuffer = await generateThumbnail(imageBuffer);
+
+    // Generate asset ID
+    const assetId = generateAssetId(body.name);
+
+    // Create asset metadata
+    const asset: Asset = {
+      id: assetId,
+      url: `/assets/${assetId}.${format}`,
+      thumbnailUrl: `/assets/${assetId}.thumb.${format}`,
+
+      type: body.type,
+      category: body.type + 's', // e.g., "character" -> "characters"
+
+      name: body.name,
+      description: body.description || '',
+
+      provider: body.provider || 'upload',
+      generationPrompt: body.generationPrompt,
+
+      projectId: body.projectId,
+      tags: body.tags || [],
+
+      relatedAssets: [],
+      usedInScenes: [],
+
+      version: 1,
+      parentAssetId: null,
+      editHistory: [],
+
+      format,
+      aspectRatio: body.aspectRatio || '9:16',
+      width,
+      height,
+      fileSize: imageBuffer.length,
+
       createdAt: new Date(),
       updatedAt: new Date(),
-      tags: asset.tags || [],
-      editHistory: asset.editHistory || [],
-      relatedAssets: asset.relatedAssets || [],
-      usedInScenes: asset.usedInScenes || [],
     };
 
-    // Add to collection
-    assets.push(newAsset);
+    // Save asset (image + metadata)
+    await saveAsset(asset, imageBuffer);
 
-    // Save metadata
-    await saveAssets(asset.projectId, assets);
+    // Save thumbnail
+    const thumbnailPath = join(process.cwd(), 'public', 'assets', `${assetId}.thumb.${format}`);
+    const { writeFile } = await import('fs/promises');
+    await writeFile(thumbnailPath, thumbnailBuffer);
 
-    return NextResponse.json(newAsset, { status: 201 });
+    return NextResponse.json(asset, { status: 201 });
   } catch (error) {
     console.error('Error creating asset:', error);
     return NextResponse.json(

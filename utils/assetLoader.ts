@@ -38,6 +38,54 @@ export class AssetLoader {
   }
 
   /**
+   * Load character references from new story storage
+   * Checks stories/{projectId}/assets/characters/ directory
+   */
+  static async loadStoryStorageCharacterRefs(
+    projectId: string
+  ): Promise<AssetReference[]> {
+    const refs: AssetReference[] = [];
+
+    try {
+      // Try to fetch assets from story storage API
+      const response = await fetch(`/api/stories/${projectId}/assets?type=character`);
+      if (response.ok) {
+        const data = await response.json();
+        const characterAssets = data.assets?.characters || [];
+
+        // Convert to AssetReference format with API URL
+        for (let i = 0; i < characterAssets.length; i++) {
+          const assetPath = characterAssets[i];
+          // Story storage returns relative paths like "assets/characters/file.png"
+          // Extract filename from path
+          const filename = assetPath.split('/').pop();
+          // Convert to API URL: /api/stories/{projectId}/assets/characters/{filename}
+          const apiUrl = `/api/stories/${projectId}/assets/characters/${filename}`;
+
+          // Extract asset ID from filename if it contains one
+          // Filename format: character-ref-{assetId}.png
+          let assetId = `story-ref-${i + 1}`; // Default fallback
+          if (filename) {
+            const match = filename.match(/character-ref-(.+)\.png$/);
+            if (match && match[1]) {
+              assetId = match[1]; // Extract the asset ID part
+            }
+          }
+
+          refs.push({
+            objectUrl: apiUrl,
+            id: assetId,
+          });
+        }
+      }
+    } catch (error) {
+      // Story storage not available or no assets
+    }
+
+    return refs;
+  }
+
+  /**
    * Load legacy character references (from static files)
    * This maintains backward compatibility with the old system
    */
@@ -85,22 +133,26 @@ export class AssetLoader {
 
   /**
    * Load all available references for a project (unified approach)
-   * Combines database assets with legacy static files
+   * Checks story storage first, then database assets, then legacy static files
    */
   static async loadAllReferences(
     projectId: string,
     aspectRatio: '9:16' | '16:9' = '9:16'
   ): Promise<AssetReference[]> {
-    // Load from both sources
-    const [dbAssets, legacyRefs] = await Promise.all([
+    // Load from all sources
+    const [storyRefs, dbAssets, legacyRefs] = await Promise.all([
+      this.loadStoryStorageCharacterRefs(projectId),
       this.loadProjectAssets(projectId),
       this.loadLegacyCharacterRefs(projectId, aspectRatio),
     ]);
 
+    // Prioritize story storage, then database assets, then legacy
+    if (storyRefs.length > 0) {
+      return storyRefs;
+    }
+
     // Convert database assets to AssetReference format
     const assetRefs = this.assetsToAssetReferences(dbAssets);
-
-    // Prioritize database assets, fallback to legacy
     return assetRefs.length > 0 ? assetRefs : legacyRefs;
   }
 

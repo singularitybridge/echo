@@ -73,18 +73,45 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     }
   }, []);
 
-  // Load the specific project from API (merges runtime db + seed data)
+  // Load the specific project from API (supports both new story storage and legacy projects)
   useEffect(() => {
     const loadProject = async () => {
       try {
-        // Fetch all projects from API
-        const response = await fetch('/api/projects');
-        if (!response.ok) {
+        // Try new story storage API first
+        const storyResponse = await fetch(`/api/stories/${projectId}`);
+
+        if (storyResponse.ok) {
+          const story = await storyResponse.json();
+
+          // Convert story format to Project format for UI compatibility
+          const projectData: Project = {
+            id: story.metadata.id,
+            title: story.metadata.title,
+            description: story.metadata.description,
+            type: story.metadata.type,
+            character: story.metadata.character,
+            aspectRatio: story.config.aspectRatio,
+            defaultModel: story.config.defaultModel,
+            defaultResolution: story.config.defaultResolution,
+            scenes: story.script.scenes,
+            createdAt: story.metadata.createdAt,
+            updatedAt: story.metadata.updatedAt,
+            tags: story.metadata.tags || [],
+          };
+
+          setProject(projectData);
+          setSelectedSceneId(projectData.scenes[0]?.id);
+          return;
+        }
+
+        // Fallback to legacy API for old projects
+        const legacyResponse = await fetch('/api/projects');
+        if (!legacyResponse.ok) {
           setError(`Failed to load projects`);
           return;
         }
 
-        const data = await response.json();
+        const data = await legacyResponse.json();
         const projectData = data.projects.find((p: Project) => p.id === projectId);
 
         if (!projectData) {
@@ -110,12 +137,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     const loadCharacterRefs = async () => {
       const aspectRatio = (project.aspectRatio ?? AspectRatio.PORTRAIT) === AspectRatio.PORTRAIT ? '9:16' : '16:9';
 
-      // Use unified AssetLoader
+      // Load from both story storage and legacy refs
+      const storyStorageRefs = await AssetLoader.loadStoryStorageCharacterRefs(projectId);
       const legacyRefs = await AssetLoader.loadLegacyCharacterRefs(projectId, aspectRatio);
+
+      // Combine all refs (story storage first, then legacy)
+      const allRefs = [...storyStorageRefs, ...legacyRefs];
 
       // Convert to full GeneratedImage format with blob data for video generation
       const refs: GeneratedImage[] = [];
-      for (const ref of legacyRefs) {
+      for (const ref of allRefs) {
         try {
           const response = await fetch(ref.objectUrl);
           if (response.ok) {
@@ -138,15 +169,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               mimeType: 'image/png',
               objectUrl,
               blob,
+              assetId: ref.id, // Preserve asset ID for thumbnail matching
             });
           }
         } catch (err) {
-          console.log(`Failed to load legacy ref: ${ref.objectUrl}`, err);
+          console.log(`Failed to load ref: ${ref.objectUrl}`, err);
         }
       }
 
       setCharacterRefs(refs);
-      console.log(`Loaded ${refs.length} ${aspectRatio} character reference images`);
+      console.log(`Loaded ${refs.length} ${aspectRatio} character reference images (${storyStorageRefs.length} from story storage + ${legacyRefs.length} legacy)`);
     };
 
     loadCharacterRefs();
@@ -196,6 +228,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               mimeType: blob.type || 'image/png',
               objectUrl,
               blob,
+              assetId: assetImg.id, // Preserve asset ID for thumbnail matching
             });
           }
         } catch (err) {
@@ -222,7 +255,17 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     const timeoutId = setTimeout(async () => {
       try {
-        await projectStorage.saveProject(project);
+        // Save script (scenes) to story storage
+        const response = await fetch(`/api/stories/${project.id}/script`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenes: project.scenes }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save script');
+        }
+
         console.log('Project auto-saved:', project.id);
       } catch (error) {
         console.error('Failed to auto-save project:', error);
@@ -965,6 +1008,18 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               thumbnailUrl = previousScene.lastFrameDataUrl;
             }
 
+            // Fallback: Try to get thumbnail from attachedAssets if no referenceMode is set
+            if (!thumbnailUrl && scene.attachedAssets && scene.attachedAssets.length > 0) {
+              const firstAsset = scene.attachedAssets[0];
+              // Check if this asset exists in combinedRefs by matching assetId
+              const matchingRef = combinedRefs.find(ref =>
+                ref.assetId === firstAsset.assetId
+              );
+              if (matchingRef) {
+                thumbnailUrl = matchingRef.objectUrl;
+              }
+            }
+
             return (
               <button
                 key={scene.id}
@@ -1471,21 +1526,45 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           aspectRatio={project.aspectRatio ?? AspectRatio.PORTRAIT}
           defaultModel={project.defaultModel ?? VeoModel.VEO}
           defaultResolution={project.defaultResolution ?? Resolution.P720}
-          onSave={(settings) => {
-            setProject((prevProject) => {
-              if (!prevProject) return prevProject;
-              const updatedProject = {
-                ...prevProject,
-                title: settings.title,
-                description: settings.description,
-                aspectRatio: settings.aspectRatio,
-                defaultModel: settings.defaultModel,
-                defaultResolution: settings.defaultResolution,
-              };
-              // Save to server
-              projectStorage.saveProject(updatedProject);
-              return updatedProject;
-            });
+          onSave={async (settings) => {
+            try {
+              // Update metadata (title, description)
+              await fetch(`/api/stories/${projectId}/metadata`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: settings.title,
+                  description: settings.description,
+                }),
+              });
+
+              // Update config (aspectRatio, model, resolution)
+              await fetch(`/api/stories/${projectId}/config`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  aspectRatio: settings.aspectRatio,
+                  defaultModel: settings.defaultModel,
+                  defaultResolution: settings.defaultResolution,
+                }),
+              });
+
+              // Update local state
+              setProject((prevProject) => {
+                if (!prevProject) return prevProject;
+                return {
+                  ...prevProject,
+                  title: settings.title,
+                  description: settings.description,
+                  aspectRatio: settings.aspectRatio,
+                  defaultModel: settings.defaultModel,
+                  defaultResolution: settings.defaultResolution,
+                };
+              });
+            } catch (error) {
+              console.error('Failed to save project settings:', error);
+              alert('Failed to save project settings. Please try again.');
+            }
           }}
         />
       )}

@@ -293,7 +293,6 @@ const ProjectList: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => {
             const thumbnail = thumbnails[project.id];
-            const hasPortraitThumbnail = project.aspectRatio === '9:16' && thumbnail;
 
             return (
               <div
@@ -305,9 +304,7 @@ const ProjectList: React.FC = () => {
                 <div className="relative w-full bg-gray-100">
                   {thumbnail ? (
                     <div
-                      className={`relative w-full ${
-                        hasPortraitThumbnail ? 'aspect-[9/16]' : 'aspect-[16/9]'
-                      } overflow-hidden`}
+                      className="relative w-full aspect-[9/16] overflow-hidden"
                     >
                       <img
                         src={thumbnail}
@@ -337,7 +334,7 @@ const ProjectList: React.FC = () => {
                     </div>
                   ) : (
                     // Fallback when no thumbnail exists
-                    <div className="relative w-full aspect-[3/2] bg-gray-100 flex items-center justify-center">
+                    <div className="relative w-full aspect-[9/16] bg-gray-100 flex items-center justify-center">
                       <div className="text-center">
                         <div className="p-4 bg-white rounded-xl mb-3 inline-block shadow-sm">
                           {getProjectIcon(project.type)}
