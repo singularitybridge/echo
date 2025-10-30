@@ -152,26 +152,25 @@ export async function DELETE(request: NextRequest) {
     // Read current data
     await db.read();
 
-    // Check if project exists in runtime database
-    if (!db.data.projects[projectId]) {
-      return NextResponse.json(
-        { error: 'Project not found or cannot delete seed projects' },
-        { status: 404 }
-      );
+    // Check if project exists in runtime database and delete it
+    const projectExistsInDb = !!db.data.projects[projectId];
+    if (projectExistsInDb) {
+      delete db.data.projects[projectId];
+      await db.write();
+      console.log(`Project ${projectId} removed from database`);
+    } else {
+      console.log(`Project ${projectId} not in database, will still delete associated files`);
     }
-
-    // Delete project from database
-    delete db.data.projects[projectId];
-    await db.write();
 
     // Delete associated files
     const publicDir = join(process.cwd(), 'public');
+    const storiesDir = join(process.cwd(), 'stories', projectId);
     const videosDir = join(publicDir, 'videos', projectId);
     const evaluationsDir = join(publicDir, 'evaluations', projectId);
     const refsDir = join(publicDir, 'generated-refs', projectId);
 
     // Remove directories if they exist
-    [videosDir, evaluationsDir, refsDir].forEach(dir => {
+    [storiesDir, videosDir, evaluationsDir, refsDir].forEach(dir => {
       if (existsSync(dir)) {
         try {
           rmSync(dir, { recursive: true, force: true });

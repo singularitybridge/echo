@@ -845,8 +845,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       }
 
       console.log('Story deleted successfully');
-      // Navigate back to home
-      router.push('/');
+
+      // Close modal and reset state
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+
+      // Use window.location for hard navigation to ensure it works
+      window.location.href = '/';
     } catch (err) {
       console.error('Story deletion failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete story');
