@@ -18,7 +18,6 @@ const ProjectList: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAssetGenerationModal, setShowAssetGenerationModal] = useState(false);
   const [currentStoryDraft, setCurrentStoryDraft] = useState<StoryDraft | null>(null);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const router = useRouter();
 
@@ -119,16 +118,13 @@ const ProjectList: React.FC = () => {
 
   const handleStoryCreated = async (story: StoryDraft) => {
     setShowCreateModal(false);
-    // Generate project ID once to be used consistently
-    const projectId = `generated-${Date.now()}`;
-    setCurrentProjectId(projectId);
     setCurrentStoryDraft(story);
     setShowAssetGenerationModal(true);
   };
 
   const handleAssetsGenerated = async (assets: Asset[]) => {
-    if (!currentStoryDraft || !currentProjectId) {
-      console.error('No story draft or project ID available');
+    if (!currentStoryDraft) {
+      console.error('No story draft available');
       return;
     }
 
@@ -219,7 +215,6 @@ const ProjectList: React.FC = () => {
       setIsCreatingProject(false);
     } finally {
       setCurrentStoryDraft(null);
-      setCurrentProjectId(null);
     }
   };
 
@@ -410,16 +405,14 @@ const ProjectList: React.FC = () => {
       />
 
       {/* Asset Generation Modal */}
-      {currentStoryDraft && currentProjectId && (
+      {currentStoryDraft && (
         <AssetGenerationFlowModal
           isOpen={showAssetGenerationModal}
           onClose={() => {
             setShowAssetGenerationModal(false);
             setCurrentStoryDraft(null);
-            setCurrentProjectId(null);
           }}
           storyDraft={currentStoryDraft}
-          projectId={currentProjectId}
           onComplete={handleAssetsGenerated}
         />
       )}

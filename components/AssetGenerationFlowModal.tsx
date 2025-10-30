@@ -12,21 +12,28 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  Copy,
 } from 'lucide-react';
 import type { StoryDraft } from '../types/story-creation';
 import type { Asset, AssetType, AssetProvider } from '../types/asset';
 import type { AspectRatio } from '../types/project';
-import { generateImage, editImage } from '../services/imageService';
+import {
+  generateImage,
+  editImage,
+  generateWithFalInstantCharacter,
+  generateWithFluxContextPro,
+  generateWithNanoBanana,
+} from '../services/imageService';
 
 interface AssetGenerationFlowModalProps {
   isOpen: boolean;
   onClose: () => void;
   storyDraft: StoryDraft;
-  projectId: string;
   onComplete: (assets: Asset[]) => void;
 }
 
 type FlowStep = 'design' | 'pose' | 'confirmation';
+type CharacterModel = 'fal-instant-character' | 'flux-context-pro' | 'gemini-nano-banana' | 'gemini-flash';
 
 interface DesignOption {
   id: string;
@@ -50,7 +57,6 @@ export default function AssetGenerationFlowModal({
   isOpen,
   onClose,
   storyDraft,
-  projectId,
   onComplete,
 }: AssetGenerationFlowModalProps) {
   const [step, setStep] = useState<FlowStep>('design');
@@ -64,9 +70,13 @@ export default function AssetGenerationFlowModal({
   const [poseOptions, setPoseOptions] = useState<PoseOption[]>([]);
   const [selectedPoses, setSelectedPoses] = useState<Set<string>>(new Set());
   const [generatingPoses, setGeneratingPoses] = useState(false);
+  const [characterModel, setCharacterModel] = useState<CharacterModel>('flux-context-pro');
 
   // Saving
   const [saving, setSaving] = useState(false);
+
+  // Prompt copying state
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
 
   // Auto-generate designs when modal opens
   useEffect(() => {
@@ -159,20 +169,72 @@ export default function AssetGenerationFlowModal({
       // Analyze scenes to determine needed emotions/poses
       const sceneEmotions = analyzeSceneEmotions(storyDraft.scenes);
 
-      // Generate poses for each emotion using fresh image generation
-      // This ensures character consistency by always including the full character description
+      // Generate poses using selected model for character consistency
       const poses = await Promise.all(
         sceneEmotions.map(async (emotion, index) => {
-          // Build prompt with full character description + emotion + pose
-          const prompt = `Portrait of ${characterDesc}, ${emotion.description}, ${emotion.pose}, high quality photorealistic, professional photography`;
+          // Build prompt with emotion + pose (character description handled differently per model)
+          const prompt = `${emotion.description}, ${emotion.pose}, high quality photorealistic, professional photography`;
 
-          console.log(`Generating pose ${index + 1}/${sceneEmotions.length}: ${emotion.name}`);
+          console.log(`Generating pose ${index + 1}/${sceneEmotions.length}: ${emotion.name} using ${characterModel}`);
           console.log('Generation prompt:', prompt);
 
-          const image = await generateImage({
-            prompt,
-            aspectRatio,
-          });
+          let image;
+
+          // Generate based on selected model
+          switch (characterModel) {
+            case 'fal-instant-character':
+              // Use selected design as reference for character consistency
+              // Convert blob to data URL for FAL API (can't access blob URLs)
+              const dataUrlForInstant = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(selectedDesignOption.imageBlob);
+              });
+
+              image = await generateWithFalInstantCharacter({
+                referenceImageUrl: dataUrlForInstant,
+                prompt,
+                aspectRatio,
+              });
+              break;
+
+            case 'flux-context-pro':
+              // Use Flux Context Pro for industry-leading consistency
+              // Convert blob to data URL for FAL API (can't access blob URLs)
+              const dataUrlForFlux = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(selectedDesignOption.imageBlob);
+              });
+
+              image = await generateWithFluxContextPro({
+                referenceImageUrl: dataUrlForFlux,
+                prompt,
+                aspectRatio,
+              });
+              break;
+
+            case 'gemini-nano-banana':
+              // Use Nano Banana with reference image
+              image = await generateWithNanoBanana({
+                referenceImageUrl: selectedDesignOption.imageUrl,
+                prompt,
+                aspectRatio,
+              });
+              break;
+
+            case 'gemini-flash':
+            default:
+              // Fallback to basic generation with full character description
+              const fullPrompt = `Portrait of ${characterDesc}, ${prompt}`;
+              image = await generateImage({
+                prompt: fullPrompt,
+                aspectRatio,
+              });
+              break;
+          }
 
           return {
             id: `pose-${index}`,
@@ -277,117 +339,99 @@ export default function AssetGenerationFlowModal({
   }
 
   /**
-   * Save selected assets and complete flow
+   * Complete flow by creating asset objects from selected images
+   * Assets will be uploaded to story storage by the parent component
    */
   async function handleSaveAssets() {
     setSaving(true);
 
     try {
-      const savedAssets: Asset[] = [];
+      const assets: Asset[] = [];
 
-      // 1. Save selected design as character asset
+      // 1. Create asset object for selected design
       const selectedDesignOption = designOptions.find(d => d.id === selectedDesign);
       if (selectedDesignOption) {
-        const designAsset = await saveAsset({
-          projectId,
+        const objectUrl = URL.createObjectURL(selectedDesignOption.imageBlob);
+
+        const designAsset: Asset = {
+          id: `design-${Date.now()}`,
+          url: objectUrl,
+          thumbnailUrl: objectUrl,
           type: 'character',
+          category: 'characters',
           name: `${storyDraft.projectMetadata.character} - Design ${selectedDesignOption.label}`,
           description: 'Main character design',
-          aspectRatio: storyDraft.projectMetadata.aspectRatio,
-          imageBlob: selectedDesignOption.imageBlob,
-          prompt: selectedDesignOption.prompt,
           provider: 'gemini',
+          generationPrompt: selectedDesignOption.prompt,
+          projectId: '', // Will be set by parent after story is created
           tags: ['character', 'main-character', 'design'],
-          category: 'Characters',
-        });
+          relatedAssets: [],
+          usedInScenes: [],
+          version: 1,
+          parentAssetId: null,
+          editHistory: [],
+          format: 'png',
+          aspectRatio: storyDraft.projectMetadata.aspectRatio,
+          width: 0, // Will be calculated on upload
+          height: 0,
+          fileSize: selectedDesignOption.imageBlob.size,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-        savedAssets.push(designAsset);
+        assets.push(designAsset);
       }
 
-      // 2. Save selected poses as character assets
+      // 2. Create asset objects for selected poses
       for (const poseId of selectedPoses) {
         const poseOption = poseOptions.find(p => p.id === poseId);
         if (poseOption) {
-          const poseAsset = await saveAsset({
-            projectId,
+          const objectUrl = URL.createObjectURL(poseOption.imageBlob);
+
+          const poseAsset: Asset = {
+            id: `pose-${poseId}`,
+            url: objectUrl,
+            thumbnailUrl: objectUrl,
             type: 'character',
+            category: 'characters',
             name: `${storyDraft.projectMetadata.character} - ${poseOption.emotion}`,
             description: `Character pose: ${poseOption.description}`,
-            aspectRatio: storyDraft.projectMetadata.aspectRatio,
-            imageBlob: poseOption.imageBlob,
-            prompt: poseOption.prompt,
             provider: 'gemini',
+            generationPrompt: poseOption.prompt,
+            projectId: '', // Will be set by parent after story is created
             tags: ['character', 'pose', poseOption.emotion],
-            category: 'Characters',
-          });
+            relatedAssets: [],
+            usedInScenes: [],
+            version: 1,
+            parentAssetId: null,
+            editHistory: [],
+            format: 'png',
+            aspectRatio: storyDraft.projectMetadata.aspectRatio,
+            width: 0,
+            height: 0,
+            fileSize: poseOption.imageBlob.size,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
 
-          savedAssets.push(poseAsset);
+          assets.push(poseAsset);
         }
       }
 
       // 3. Link assets to scenes
       const linkedAssets = linkAssetsToScenes(
         storyDraft.scenes,
-        savedAssets,
+        assets,
         poseOptions
       );
 
-      // 4. Return to parent
+      // 4. Return to parent (assets will be uploaded to story storage)
       onComplete(linkedAssets);
     } catch (error) {
-      console.error('Failed to save assets:', error);
-      alert('Failed to save assets. Please try again.');
+      console.error('Failed to prepare assets:', error);
+      alert('Failed to prepare assets. Please try again.');
       setSaving(false);
     }
-  }
-
-  /**
-   * Save single asset (image + metadata) using unified asset API
-   */
-  async function saveAsset(data: {
-    projectId: string;
-    type: AssetType;
-    name: string;
-    description: string;
-    aspectRatio: AspectRatio;
-    imageBlob: Blob;
-    prompt: string;
-    provider: AssetProvider;
-    tags: string[];
-    category: string;
-  }): Promise<Asset> {
-    // Convert blob to base64
-    const reader = new FileReader();
-    const base64Promise = new Promise<string>((resolve, reject) => {
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-    });
-    reader.readAsDataURL(data.imageBlob);
-    const imageBase64 = await base64Promise;
-
-    // Create asset via unified API
-    const response = await fetch('/api/assets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: data.projectId,
-        type: data.type,
-        name: data.name,
-        description: data.description,
-        imageBase64: imageBase64,
-        aspectRatio: data.aspectRatio,
-        provider: data.provider,
-        generationPrompt: data.prompt,
-        tags: data.tags,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create asset');
-    }
-
-    return await response.json();
   }
 
   /**
@@ -488,9 +532,18 @@ export default function AssetGenerationFlowModal({
 
   const selectedDesignLabel = designOptions.find(d => d.id === selectedDesign)?.label || 'A';
 
+  /**
+   * Copy prompt to clipboard
+   */
+  function copyPrompt(promptId: string, promptText: string) {
+    navigator.clipboard.writeText(promptText);
+    setCopiedPromptId(promptId);
+    setTimeout(() => setCopiedPromptId(null), 2000);
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -520,10 +573,10 @@ export default function AssetGenerationFlowModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-8">
           {/* Step 1: Design Selection */}
           {step === 'design' && (
-            <div className="p-8">
+            <div>
               {/* Character Info Card */}
               <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
                 <div className="flex items-start gap-4">
@@ -550,10 +603,10 @@ export default function AssetGenerationFlowModal({
               ) : (
                 <div className="grid md:grid-cols-3 gap-6">
                   {designOptions.map(design => (
-                    <button
+                    <div
                       key={design.id}
                       onClick={() => setSelectedDesign(design.id)}
-                      className={`relative rounded-xl overflow-hidden border-2 transition-all ${
+                      className={`relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
                         selectedDesign === design.id
                           ? 'border-indigo-600 ring-4 ring-indigo-100'
                           : 'border-gray-200 hover:border-indigo-300'
@@ -567,7 +620,7 @@ export default function AssetGenerationFlowModal({
                         />
                       </div>
                       <div className="p-4 bg-white border-t border-gray-200">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-2">
                           <h4 className="font-semibold text-gray-900">Design {design.label}</h4>
                           <div
                             className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -581,8 +634,30 @@ export default function AssetGenerationFlowModal({
                             )}
                           </div>
                         </div>
+
+                        {/* Prompt display */}
+                        <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-700">Prompt</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyPrompt(design.id, design.prompt);
+                              }}
+                              className="text-gray-500 hover:text-gray-700 transition-colors p-1"
+                              title="Copy prompt"
+                            >
+                              {copiedPromptId === design.id ? (
+                                <Check className="w-3 h-3 text-green-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-600 line-clamp-2">{design.prompt}</p>
+                        </div>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -591,10 +666,70 @@ export default function AssetGenerationFlowModal({
 
           {/* Step 2: Pose Selection */}
           {step === 'pose' && (
-            <div className="p-8">
-              <p className="text-sm text-gray-600 mb-6">
-                Based on <span className="font-semibold">Design {selectedDesignLabel}</span>
-              </p>
+            <div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-3">
+                  Based on <span className="font-semibold">Design {selectedDesignLabel}</span>
+                </p>
+
+                {/* Model Selection */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Character Consistency Model
+                  </label>
+                  <select
+                    value={characterModel}
+                    onChange={(e) => {
+                      setCharacterModel(e.target.value as CharacterModel);
+                      // Regenerate poses with new model
+                      if (poseOptions.length > 0) {
+                        setPoseOptions([]);
+                        setSelectedPoses(new Set());
+                        setTimeout(() => generatePoseOptions(), 100);
+                      }
+                    }}
+                    disabled={generatingPoses}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="flux-context-pro">
+                      Flux Context Pro (99.7% consistency)
+                    </option>
+                    <option value="fal-instant-character">
+                      FAL Instant Character (Good consistency)
+                    </option>
+                    <option value="gemini-nano-banana">
+                      Gemini Nano Banana (Fastest, 1-2s)
+                    </option>
+                    <option value="gemini-flash">
+                      Gemini Flash (Fallback)
+                    </option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {characterModel === 'flux-context-pro' &&
+                      'Industry-leading 99.7% character consistency accuracy'}
+                    {characterModel === 'fal-instant-character' &&
+                      'Uses reference image to maintain character identity across poses'}
+                    {characterModel === 'gemini-nano-banana' &&
+                      '8x faster with strong semantic understanding'}
+                    {characterModel === 'gemini-flash' &&
+                      'Basic generation without character reference'}
+                  </p>
+
+                  {/* Manual Regenerate Button */}
+                  <button
+                    onClick={() => {
+                      setPoseOptions([]);
+                      setSelectedPoses(new Set());
+                      generatePoseOptions();
+                    }}
+                    disabled={generatingPoses}
+                    className="mt-3 w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {generatingPoses ? 'Generating...' : 'Regenerate Poses'}
+                  </button>
+                </div>
+              </div>
 
               {generatingPoses ? (
                 <div className="flex flex-col items-center justify-center py-12">
@@ -605,10 +740,10 @@ export default function AssetGenerationFlowModal({
               ) : (
                 <div className="grid md:grid-cols-3 gap-6">
                   {poseOptions.map(pose => (
-                    <button
+                    <div
                       key={pose.id}
                       onClick={() => togglePoseSelection(pose.id)}
-                      className={`relative rounded-xl overflow-hidden border-2 transition-all ${
+                      className={`relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
                         selectedPoses.has(pose.id)
                           ? 'border-indigo-600 ring-4 ring-indigo-100'
                           : 'border-gray-200 hover:border-indigo-300'
@@ -634,7 +769,7 @@ export default function AssetGenerationFlowModal({
                           />
                         </div>
                         <p className="text-xs text-gray-600 mb-3">{pose.description}</p>
-                        <div className="flex gap-1 flex-wrap">
+                        <div className="flex gap-1 flex-wrap mb-3">
                           {pose.sceneTags.map(scene => (
                             <span
                               key={scene}
@@ -644,8 +779,30 @@ export default function AssetGenerationFlowModal({
                             </span>
                           ))}
                         </div>
+
+                        {/* Prompt display */}
+                        <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-700">Prompt</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyPrompt(pose.id, pose.prompt);
+                              }}
+                              className="text-gray-500 hover:text-gray-700 transition-colors p-1"
+                              title="Copy prompt"
+                            >
+                              {copiedPromptId === pose.id ? (
+                                <Check className="w-3 h-3 text-green-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-600 line-clamp-2">{pose.prompt}</p>
+                        </div>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -654,7 +811,7 @@ export default function AssetGenerationFlowModal({
 
           {/* Step 3: Confirmation */}
           {step === 'confirmation' && (
-            <div className="p-8">
+            <div>
               <div className="space-y-6">
                 {/* Selected Design */}
                 <div>
