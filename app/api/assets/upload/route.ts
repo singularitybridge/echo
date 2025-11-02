@@ -3,48 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, readFile, mkdir } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import { join } from 'path';
-import { existsSync } from 'fs';
 import type { AssetType, Asset } from '@/types/asset';
-
-const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
-const ASSETS_METADATA_DIR = join(process.cwd(), 'data', 'assets');
-
-/**
- * Get the path to the assets metadata file for a project
- */
-function getMetadataPath(projectId: string): string {
-  return join(ASSETS_METADATA_DIR, `${projectId}.json`);
-}
-
-/**
- * Load assets metadata for a project
- */
-async function loadAssets(projectId: string): Promise<Asset[]> {
-  const metadataPath = getMetadataPath(projectId);
-
-  if (!existsSync(metadataPath)) {
-    return [];
-  }
-
-  const data = await readFile(metadataPath, 'utf-8');
-  return JSON.parse(data);
-}
-
-/**
- * Save assets metadata for a project
- */
-async function saveAssets(projectId: string, assets: Asset[]): Promise<void> {
-  const metadataPath = getMetadataPath(projectId);
-
-  // Ensure metadata directory exists
-  if (!existsSync(ASSETS_METADATA_DIR)) {
-    await mkdir(ASSETS_METADATA_DIR, { recursive: true });
-  }
-
-  await writeFile(metadataPath, JSON.stringify(assets, null, 2), 'utf-8');
-}
+import { generateAssetId } from '@/services/assetId';
+import { saveAsset } from '@/services/assetStorage';
+import { generateThumbnail, getImageDimensions } from '@/services/thumbnailGenerator';
 
 /**
  * POST - Upload an external image file as an asset
@@ -82,53 +46,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique asset ID
-    const assetId = `asset-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    // Get image buffer
+    const imageBuffer = Buffer.from(await file.arrayBuffer());
 
-    // Create directory structure: /public/assets/{projectId}/{type}/
-    const assetDir = join(ASSETS_DIR, projectId, type);
-    if (!existsSync(assetDir)) {
-      await mkdir(assetDir, { recursive: true });
+    // Detect format from file extension
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+    let format: 'png' | 'jpg' | 'webp' = 'png';
+    if (extension === 'jpg' || extension === 'jpeg') {
+      format = 'jpg';
+    } else if (extension === 'webp') {
+      format = 'webp';
     }
 
-    // Save image file
-    const extension = file.name.split('.').pop() || 'png';
-    const imagePath = join(assetDir, `${assetId}.${extension}`);
-    const imageBuffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(imagePath, imageBuffer);
+    // Get image dimensions
+    const { width, height } = await getImageDimensions(imageBuffer);
 
-    // Generate URLs
-    const imageUrl = `/assets/${projectId}/${type}/${assetId}.${extension}`;
-    const thumbnailUrl = imageUrl; // Use same URL for now
+    // Generate thumbnail
+    const thumbnailBuffer = await generateThumbnail(imageBuffer);
 
-    // Load existing assets
-    const assets = await loadAssets(projectId);
+    // Generate asset ID
+    const assetId = generateAssetId(name);
 
-    // Create new asset with metadata
+    // Create asset metadata
     const newAsset: Asset = {
       id: assetId,
-      projectId,
+      url: `/assets/${assetId}.${format}`,
+      thumbnailUrl: `/assets/${assetId}.thumb.${format}`,
+
       type,
+      category: type + 's', // e.g., "character" -> "characters"
+
       name,
       description: description || '',
-      aspectRatio: '16:9', // Default, can be detected from image
-      imageUrl,
-      thumbnailUrl,
-      generationPrompt: '', // Not AI-generated
-      provider: 'upload', // Mark as uploaded
+
+      provider: 'uploaded',
+      generationPrompt: '',
+
+      projectId,
       tags: [],
-      editHistory: [],
+
       relatedAssets: [],
       usedInScenes: [],
+
+      version: 1,
+      parentAssetId: null,
+      editHistory: [],
+
+      format,
+      aspectRatio: width > height ? '16:9' : '9:16', // Auto-detect from dimensions
+      width,
+      height,
+      fileSize: imageBuffer.length,
+
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    // Add to assets and save
-    assets.push(newAsset);
-    await saveAssets(projectId, assets);
+    // Save asset (image + metadata) using unified storage system
+    await saveAsset(newAsset, imageBuffer);
 
-    return NextResponse.json(newAsset);
+    // Save thumbnail
+    const thumbnailPath = join(process.cwd(), 'public', 'assets', `${assetId}.thumb.${format}`);
+    await writeFile(thumbnailPath, thumbnailBuffer);
+
+    return NextResponse.json(newAsset, { status: 201 });
   } catch (error) {
     console.error('Error uploading asset:', error);
     return NextResponse.json(
