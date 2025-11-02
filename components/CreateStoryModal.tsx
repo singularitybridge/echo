@@ -267,16 +267,12 @@ export default function CreateStoryModal({
       <div
         className={`bg-white rounded-xl shadow-xl w-full ${
           step === 'edit'
-            ? 'max-w-7xl max-h-[90vh] overflow-hidden flex flex-col'
-            : 'max-w-4xl max-h-[90vh] overflow-y-auto'
+            ? 'max-w-7xl h-[90vh] overflow-hidden flex flex-col'
+            : 'max-w-4xl h-[90vh] overflow-hidden flex flex-col'
         }`}
       >
         {/* Header */}
-        <div
-          className={`bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between ${
-            step === 'edit' ? 'flex-shrink-0' : 'sticky top-0'
-          }`}
-        >
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             {step !== 'choice' && (
               <button
@@ -317,7 +313,7 @@ export default function CreateStoryModal({
         </div>
 
         {/* Content */}
-        <div className={step === 'edit' ? 'flex-1 flex flex-col overflow-hidden' : 'p-8'}>
+        <div className={step === 'edit' ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto p-8'}>
           {/* Step 1: Choice */}
           {step === 'choice' && (
             <div className="grid md:grid-cols-2 gap-6">
@@ -328,9 +324,9 @@ export default function CreateStoryModal({
               >
                 <div className="flex flex-col h-full">
                   <div className="mb-4">
-                    <div className="w-full h-40 rounded-xl overflow-hidden mb-4">
+                    <div className="w-full h-40 rounded-xl overflow-hidden mb-4 bg-white">
                       <img
-                        src="/docs/quick-start-v1.png"
+                        src="/docs/quick-start-illustration-16x9.png"
                         alt="Quick Start"
                         className="w-full h-full object-cover"
                       />
@@ -374,9 +370,9 @@ export default function CreateStoryModal({
               >
                 <div className="flex flex-col h-full">
                   <div className="mb-4">
-                    <div className="w-full h-40 rounded-xl overflow-hidden mb-4">
+                    <div className="w-full h-40 rounded-xl overflow-hidden mb-4 bg-white">
                       <img
-                        src="/docs/custom-story-v1.png"
+                        src="/docs/custom-story-illustration-16x9.png"
                         alt="Custom Story"
                         className="w-full h-full object-cover"
                       />
@@ -835,7 +831,7 @@ export default function CreateStoryModal({
 
         {/* Footer - Show for all steps except edit (which has its own footer) */}
         {step !== 'edit' && (
-          <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
             {/* Back button - show for quick and custom steps */}
             {(step === 'quick' || step === 'custom') && (
               <button
