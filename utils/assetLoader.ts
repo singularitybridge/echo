@@ -123,9 +123,9 @@ export class AssetLoader {
    */
   static assetsToAssetReferences(assets: Asset[]): AssetReference[] {
     return assets
-      .filter(asset => asset.imageUrl) // Only include assets with valid URLs
+      .filter(asset => asset.url) // Only include assets with valid URLs
       .map(asset => ({
-        objectUrl: asset.imageUrl,
+        objectUrl: asset.url,
         id: asset.id,
         aspectRatio: asset.aspectRatio,
       }));

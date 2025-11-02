@@ -185,13 +185,28 @@ export default function EditAssetModal({
     try {
       const currentAsset = versionHistory[currentVersionIndex];
 
-      // Update the original asset with the current version
+      // Download the edited image as blob and convert to base64
+      const imageResponse = await fetch(currentAsset.url);
+      if (!imageResponse.ok) {
+        throw new Error('Failed to fetch edited image');
+      }
+
+      const imageBlob = await imageResponse.blob();
+
+      // Convert blob to base64
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageBlob);
+      });
+
+      // Update the original asset with the edited image
       const response = await fetch(`/api/assets/${asset.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: currentAsset.url,
-          thumbnailUrl: currentAsset.thumbnailUrl,
+          imageBase64: base64Image,
           editHistory: currentAsset.editHistory,
           version: currentAsset.version,
         }),

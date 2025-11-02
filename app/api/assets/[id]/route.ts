@@ -38,7 +38,7 @@ export async function GET(
 }
 
 /**
- * PATCH - Update asset metadata
+ * PATCH - Update asset metadata and optionally replace image
  */
 export async function PATCH(
   request: NextRequest,
@@ -55,6 +55,32 @@ export async function PATCH(
         { error: 'Asset not found' },
         { status: 404 }
       );
+    }
+
+    // If imageBase64 is provided, replace the image file
+    if (updates.imageBase64) {
+      const { writeFile } = await import('fs/promises');
+      const { generateThumbnail } = await import('@/services/thumbnailGenerator');
+
+      // Decode base64 image
+      const base64Data = updates.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Buffer.from(base64Data, 'base64');
+
+      // Write new image file (keeping original filename)
+      const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
+      const imagePath = join(ASSETS_DIR, `${assetId}.${asset.format}`);
+      await writeFile(imagePath, imageBuffer);
+
+      // Generate and save new thumbnail
+      const thumbnailBuffer = await generateThumbnail(imageBuffer);
+      const thumbnailPath = join(ASSETS_DIR, `${assetId}.thumb.${asset.format}`);
+      await writeFile(thumbnailPath, thumbnailBuffer);
+
+      // Update file size
+      updates.fileSize = imageBuffer.length;
+
+      // Remove imageBase64 from updates (don't store in metadata)
+      delete updates.imageBase64;
     }
 
     // Update asset with new data
