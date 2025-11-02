@@ -30,7 +30,7 @@ export default function EditAssetModal({
 }: EditAssetModalProps) {
   const [editPrompt, setEditPrompt] = useState('');
   const [editing, setEditing] = useState(false);
-  const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null);
+  const [editedAsset, setEditedAsset] = useState<Asset | null>(null);
   const [showComparison, setShowComparison] = useState(true);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function EditAssetModal({
       // Reset state when modal closes
       setEditPrompt('');
       setEditing(false);
-      setEditedImageUrl(null);
+      setEditedAsset(null);
       setShowComparison(true);
     }
   }, [isOpen]);
@@ -65,7 +65,7 @@ export default function EditAssetModal({
       }
 
       const result = await response.json();
-      setEditedImageUrl(result.imageUrl);
+      setEditedAsset(result);
     } catch (error) {
       console.error('Failed to edit asset:', error);
       alert('Failed to edit asset. Please try again.');
@@ -75,7 +75,7 @@ export default function EditAssetModal({
   };
 
   const handleSave = async () => {
-    if (!editedImageUrl) return;
+    if (!editedAsset) return;
 
     // Save and close
     onEditComplete();
@@ -83,7 +83,7 @@ export default function EditAssetModal({
   };
 
   const handleReset = () => {
-    setEditedImageUrl(null);
+    setEditedAsset(null);
     setEditPrompt('');
   };
 
@@ -136,7 +136,7 @@ export default function EditAssetModal({
             <textarea
               value={editPrompt}
               onChange={(e) => setEditPrompt(e.target.value)}
-              disabled={editing || !!editedImageUrl}
+              disabled={editing || !!editedAsset}
               rows={3}
               placeholder="e.g., Add a red hat, Change background to blue sky, Make the character smile..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:opacity-50"
@@ -154,7 +154,7 @@ export default function EditAssetModal({
                 <div className="text-sm font-medium text-gray-700 mb-2">Original</div>
                 <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
                   <img
-                    src={asset.imageUrl}
+                    src={asset.url}
                     alt={asset.name}
                     className="w-full h-full object-contain"
                   />
@@ -164,12 +164,12 @@ export default function EditAssetModal({
               {/* Edited */}
               <div>
                 <div className="text-sm font-medium text-gray-700 mb-2">
-                  {editedImageUrl ? 'Edited' : 'Preview'}
+                  {editedAsset ? 'Edited' : 'Preview'}
                 </div>
                 <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-                  {editedImageUrl ? (
+                  {editedAsset ? (
                     <img
-                      src={editedImageUrl}
+                      src={editedAsset.url}
                       alt="Edited"
                       className="w-full h-full object-contain"
                     />
@@ -202,7 +202,7 @@ export default function EditAssetModal({
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
           <div>
-            {editedImageUrl && (
+            {editedAsset && (
               <button
                 onClick={handleReset}
                 disabled={editing}
@@ -221,7 +221,7 @@ export default function EditAssetModal({
             >
               Cancel
             </button>
-            {editedImageUrl ? (
+            {editedAsset ? (
               <button
                 onClick={handleSave}
                 disabled={editing}
