@@ -258,7 +258,13 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
           </div>
         ) : assets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64">
-            <Radio className="w-16 h-16 text-indigo-400 mb-4" />
+            <div className="w-full max-w-md h-48 mb-6">
+              <img
+                src="/docs/asset-library-empty-state.png"
+                alt="Asset Library"
+                className="w-full h-full object-contain"
+              />
+            </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No assets yet</h3>
             <p className="text-sm text-gray-500 mb-4">
               Get started by generating or uploading your first asset
@@ -266,14 +272,14 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
             <div className="flex gap-2">
               <button
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-                onClick={() => alert('Generate modal coming in Phase 2')}
+                onClick={() => setShowGenerateModal(true)}
               >
                 <Plus className="w-4 h-4" />
                 Generate Asset
               </button>
               <button
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                onClick={() => alert('Upload modal coming in Phase 3')}
+                onClick={() => setShowUploadModal(true)}
               >
                 <Upload className="w-4 h-4" />
                 Upload Asset

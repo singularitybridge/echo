@@ -535,6 +535,15 @@ export default function CreateStoryModal({
           {/* Step 3: Custom Story Form */}
           {step === 'custom' && (
             <div className="space-y-6 max-w-2xl mx-auto">
+              {/* Illustration */}
+              <div className="w-full h-48 rounded-xl overflow-hidden bg-white border border-gray-100">
+                <img
+                  src="/docs/custom-story-form-illustration-16x9.png"
+                  alt="Custom Story Creation"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
                   Story Concept <span className="text-red-500">*</span>
