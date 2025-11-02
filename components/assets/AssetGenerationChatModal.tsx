@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Sparkles, Check, Loader2, Edit3, Download, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { X, Sparkles, Check, Loader2, Edit3, Download, ChevronLeft, ChevronRight, ArrowRight, FileText } from 'lucide-react';
 import type { AssetType, AssetProvider } from '@/types/asset';
 import type { AspectRatio } from '@/types/project';
 
@@ -57,6 +57,7 @@ export default function AssetGenerationChatModal({
   const [generatedAssets, setGeneratedAssets] = useState<GeneratedAsset[]>([]);
   const [currentAssetIndex, setCurrentAssetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -279,13 +280,25 @@ export default function AssetGenerationChatModal({
               <p className="text-sm text-gray-500">Chat with AI to create and refine visual assets</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            disabled={isGenerating || isSaving}
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            {generatedAssets.length > 0 && (
+              <button
+                onClick={() => setShowPromptPreview(!showPromptPreview)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={isGenerating || isSaving}
+              >
+                <FileText className="w-4 h-4" />
+                {showPromptPreview ? 'Hide Prompts' : 'View Prompts'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={isGenerating || isSaving}
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
         </div>
 
         {/* Main Content: 60/40 Split Layout */}
@@ -536,6 +549,79 @@ export default function AssetGenerationChatModal({
           </div>
         </div>
       </div>
+
+      {/* Prompt Preview Overlay */}
+      {showPromptPreview && (
+        <div className="absolute inset-0 bg-white z-10 flex flex-col">
+          {/* Preview Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <FileText className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Generation Prompts</h2>
+                <p className="text-sm text-gray-500">Review all asset generation prompts</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPromptPreview(false)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Preview Content */}
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-4xl mx-auto">
+              <div className="screenplay">
+                <div className="screenplay-transition">ASSET GENERATION SCRIPT</div>
+
+                {generatedAssets.map((asset, index) => (
+                  <div key={asset.id} className="mb-8">
+                    <div className="screenplay-scene-heading">
+                      ASSET {index + 1} - {asset.metadata.type.toUpperCase()}
+                    </div>
+
+                    <div className="screenplay-action">
+                      Type: {asset.metadata.type}
+                      <br />
+                      Aspect Ratio: {asset.metadata.aspectRatio}
+                      <br />
+                      Generated: {new Date(asset.metadata.timestamp).toLocaleString()}
+                    </div>
+
+                    <div className="screenplay-character">GENERATION PROMPT</div>
+                    <div className="screenplay-dialogue">{asset.metadata.prompt}</div>
+
+                    {index < generatedAssets.length - 1 && (
+                      <div className="screenplay-transition">---</div>
+                    )}
+                  </div>
+                ))}
+
+                <div className="screenplay-transition">END OF SCRIPT</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Footer */}
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                {generatedAssets.length} {generatedAssets.length === 1 ? 'asset' : 'assets'} generated
+              </div>
+              <button
+                onClick={() => setShowPromptPreview(false)}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
