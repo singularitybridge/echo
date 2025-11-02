@@ -92,10 +92,12 @@ export default function AssetGenerationChatModal({
 
       switch (e.key) {
         case 'ArrowLeft':
+        case 'ArrowUp':
           e.preventDefault();
           setCurrentAssetIndex(prev => Math.max(0, prev - 1));
           break;
         case 'ArrowRight':
+        case 'ArrowDown':
           e.preventDefault();
           setCurrentAssetIndex(prev => Math.min(generatedAssets.length - 1, prev + 1));
           break;
@@ -304,72 +306,142 @@ export default function AssetGenerationChatModal({
               </div>
             ) : (
               <>
-                {/* Navigation Bar */}
-                <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCurrentAssetIndex(prev => Math.max(0, prev - 1))}
-                        disabled={!canNavigateLeft}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Previous (←)"
-                      >
-                        <ChevronLeft className="w-4 h-4 text-gray-600" />
-                      </button>
-                      <button
-                        onClick={() => setCurrentAssetIndex(prev => Math.min(generatedAssets.length - 1, prev + 1))}
-                        disabled={!canNavigateRight}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Next (→)"
-                      >
-                        <ChevronRight className="w-4 h-4 text-gray-600" />
-                      </button>
-                    </div>
+                {/* Top Action Bar */}
+                {/* Image Gallery: Thumbnails (Left) + Active Image (Right) */}
+                <div className="flex-1 flex overflow-hidden">
+                  {/* Left: Vertical Thumbnail List */}
+                  <div className="w-24 bg-gray-50 py-4 overflow-y-auto flex-shrink-0 flex items-center justify-center">
+                    <div className="space-y-2 w-16">
+                      {generatedAssets.map((asset, index) => (
+                        <button
+                          key={asset.id}
+                          onClick={() => setCurrentAssetIndex(index)}
+                          className={`relative w-full rounded-md overflow-hidden transition-all duration-200 ${
+                            index === currentAssetIndex
+                              ? 'ring-1 ring-primary/60 shadow-sm'
+                              : 'opacity-70 hover:opacity-100'
+                          }`}
+                          style={{ aspectRatio: '9/16' }}
+                          title={`Image ${index + 1}`}
+                        >
+                          <img
+                            src={asset.imageUrl}
+                            alt={`${asset.metadata.type} ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
 
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-700">
-                        {currentAssetIndex + 1} of {generatedAssets.length}
-                      </span>
-                      <button
-                        onClick={() => toggleSelection(currentAsset.id)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                          currentAsset.selected
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {currentAsset.selected ? (
-                          <>
-                            <Check className="w-4 h-4 inline mr-1" />
-                            Selected
-                          </>
-                        ) : (
-                          'Select'
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleDownload(currentAsset)}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                        title="Download"
-                      >
-                        <Download className="w-4 h-4 text-gray-600" />
-                      </button>
+                          {/* Selection Indicator */}
+                          {asset.selected && (
+                            <div className="absolute top-1 right-1 bg-primary rounded-full p-0.5">
+                              <Check className="w-2.5 h-2.5 text-primary-foreground" />
+                            </div>
+                          )}
+
+                          {/* Active Indicator */}
+                          {index === currentAssetIndex && (
+                            <div className="absolute inset-0 bg-primary/5" />
+                          )}
+
+                          {/* Image Number Badge */}
+                          <div className="absolute bottom-1 left-1 text-white text-[10px] font-semibold drop-shadow-md">
+                            {index + 1}
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </div>
 
-                {/* Large Image Display */}
-                <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
-                  <div className="relative h-full w-full flex items-center justify-center">
-                    <img
-                      src={currentAsset.imageUrl}
-                      alt={currentAsset.metadata.type}
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                    />
+                  {/* Right: Large Active Image */}
+                  <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
+                    <div className="relative max-w-full max-h-full flex items-center justify-center">
+                      <img
+                        src={currentAsset.imageUrl}
+                        alt={currentAsset.metadata.type}
+                        className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                      />
 
-                    {/* Metadata Badge */}
-                    <div className="absolute top-3 left-3 px-3 py-1.5 bg-black bg-opacity-70 text-white text-sm rounded-lg font-medium">
-                      {currentAsset.metadata.type} • {currentAsset.metadata.aspectRatio}
+                      {/* Metadata Text (No Frame) */}
+                      <div className="absolute top-4 left-4 text-sm font-medium text-gray-600">
+                        {currentAsset.metadata.type} • {currentAsset.metadata.aspectRatio}
+                      </div>
+
+                      {/* Action Buttons (Top Right) - On Image */}
+                      <div className="absolute top-4 right-4 flex items-center gap-2">
+                        {/* Download Button */}
+                        <button
+                          onClick={() => handleDownload(currentAsset)}
+                          className="p-2 rounded-lg bg-white/90 hover:bg-white shadow-lg transition-colors backdrop-blur-sm"
+                          title="Download"
+                        >
+                          <Download className="w-4 h-4 text-gray-700" />
+                        </button>
+
+                        {/* Save to Gallery Icon Button */}
+                        <button
+                          onClick={async () => {
+                            if (currentAsset.selected) {
+                              // Already saved, skip
+                              return;
+                            }
+
+                            try {
+                              setIsSaving(true);
+
+                              // Save this single asset directly
+                              const assetToSave = {
+                                type: currentAsset.metadata.type,
+                                name: `${currentAsset.metadata.type} ${Date.now()}`,
+                                description: currentAsset.metadata.prompt,
+                                aspectRatio: currentAsset.metadata.aspectRatio as unknown as AspectRatio,
+                                imageBlob: currentAsset.blob,
+                                prompt: currentAsset.metadata.prompt,
+                                provider: 'gemini' as AssetProvider,
+                              };
+
+                              await onSaveAssets([assetToSave]);
+
+                              // Mark as selected
+                              toggleSelection(currentAsset.id);
+
+                              // Add chat message notification
+                              setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: `✓ Saved "${currentAsset.metadata.type}" to your asset gallery!`,
+                                timestamp: Date.now(),
+                              }]);
+
+                              // Scroll to bottom of chat
+                              setTimeout(() => {
+                                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              }, 100);
+                            } catch (error) {
+                              console.error('Failed to save asset:', error);
+                              setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: `Failed to save asset. Please try again.`,
+                                timestamp: Date.now(),
+                              }]);
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          }}
+                          disabled={isSaving || currentAsset.selected}
+                          className={`p-2 rounded-lg shadow-lg transition-colors backdrop-blur-sm ${
+                            currentAsset.selected
+                              ? 'bg-indigo-600 hover:bg-indigo-700 cursor-default'
+                              : 'bg-white/90 hover:bg-white'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={currentAsset.selected ? "Already saved to gallery" : "Save to gallery"}
+                        >
+                          {isSaving ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          ) : currentAsset.selected ? (
+                            <Check className="w-4 h-4 text-white" />
+                          ) : (
+                            <Check className="w-4 h-4 text-gray-700" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -461,43 +533,6 @@ export default function AssetGenerationChatModal({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
-          <div className="text-sm text-gray-600">
-            {selectedCount > 0 && (
-              <span>{selectedCount} asset{selectedCount !== 1 ? 's' : ''} selected</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              disabled={isGenerating || isSaving}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              onClick={handleSave}
-              disabled={isSaving || selectedCount === 0}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  Save Selected ({selectedCount})
-                </>
-              )}
-            </button>
           </div>
         </div>
       </div>
