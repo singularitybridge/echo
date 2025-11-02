@@ -4,14 +4,16 @@
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X,
-  Wand2,
+  Send,
   Loader2,
-  Check,
-  RotateCcw,
-  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  ChevronsRight,
+  Sparkles,
 } from 'lucide-react';
 import type { Asset } from '@/types/asset';
 
@@ -22,233 +24,436 @@ interface EditAssetModalProps {
   onEditComplete: () => void;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
 export default function EditAssetModal({
   isOpen,
   onClose,
   asset,
   onEditComplete,
 }: EditAssetModalProps) {
-  const [editPrompt, setEditPrompt] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [editedAsset, setEditedAsset] = useState<Asset | null>(null);
-  const [showComparison, setShowComparison] = useState(true);
+  // State
+  const [versionHistory, setVersionHistory] = useState<Asset[]>([]);
+  const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoadingLineage, setIsLoadingLineage] = useState(false);
 
+  // Refs
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load version lineage when modal opens
+  useEffect(() => {
+    if (!isOpen || !asset) return;
+
+    const loadLineage = async () => {
+      setIsLoadingLineage(true);
+      try {
+        const response = await fetch(`/api/assets/${asset.id}/lineage`);
+        if (!response.ok) {
+          throw new Error('Failed to load version history');
+        }
+
+        const data = await response.json();
+        setVersionHistory(data.lineage);
+        setCurrentVersionIndex(data.lineage.length - 1); // Start at latest version
+
+        // Initialize messages with edit history
+        const initialMessages: ChatMessage[] = [];
+        data.lineage.forEach((version: Asset, index: number) => {
+          if (index === 0) {
+            // First version - original asset
+            initialMessages.push({
+              role: 'assistant',
+              content: `Asset created: ${version.name}`,
+              timestamp: new Date(version.createdAt).getTime(),
+            });
+          } else {
+            // Subsequent versions - show edit prompts
+            const editEntry = version.editHistory[version.editHistory.length - 1];
+            if (editEntry) {
+              initialMessages.push({
+                role: 'user',
+                content: editEntry.editPrompt,
+                timestamp: new Date(editEntry.timestamp).getTime(),
+              });
+              initialMessages.push({
+                role: 'assistant',
+                content: `Version ${version.version} created with your changes.`,
+                timestamp: new Date(version.createdAt).getTime(),
+              });
+            }
+          }
+        });
+        setMessages(initialMessages);
+      } catch (error) {
+        console.error('Failed to load version history:', error);
+        alert('Failed to load version history');
+      } finally {
+        setIsLoadingLineage(false);
+      }
+    };
+
+    loadLineage();
+  }, [isOpen, asset]);
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+Enter to send message
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSendMessage();
+        return;
+      }
+
+      // Esc to close
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      // / to focus chat input
+      if (e.key === '/' && document.activeElement !== chatInputRef.current) {
+        e.preventDefault();
+        chatInputRef.current?.focus();
+        return;
+      }
+
+      // Arrow navigation (only when chat input is not focused)
+      if (document.activeElement === chatInputRef.current) return;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          navigateVersion(-1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          navigateVersion(1);
+          break;
+        case 'Home':
+          e.preventDefault();
+          setCurrentVersionIndex(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          setCurrentVersionIndex(versionHistory.length - 1);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, versionHistory, currentVersionIndex, chatInput]);
+
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      // Reset state when modal closes
-      setEditPrompt('');
-      setEditing(false);
-      setEditedAsset(null);
-      setShowComparison(true);
+      setVersionHistory([]);
+      setCurrentVersionIndex(0);
+      setMessages([]);
+      setChatInput('');
+      setIsGenerating(false);
     }
   }, [isOpen]);
 
-  const handleEdit = async () => {
-    if (!asset || !editPrompt.trim()) {
-      alert('Please enter an edit prompt');
-      return;
+  const navigateVersion = (delta: number) => {
+    const newIndex = currentVersionIndex + delta;
+    if (newIndex >= 0 && newIndex < versionHistory.length) {
+      setCurrentVersionIndex(newIndex);
     }
+  };
 
-    setEditing(true);
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || isGenerating) return;
+
+    const editPrompt = chatInput.trim();
+    setChatInput('');
+    setIsGenerating(true);
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: editPrompt,
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
 
     try {
-      const response = await fetch(`/api/assets/${asset.id}/edit`, {
+      // Edit the current version
+      const currentAsset = versionHistory[currentVersionIndex];
+      const response = await fetch(`/api/assets/${currentAsset.id}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          editPrompt: editPrompt.trim(),
-        }),
+        body: JSON.stringify({ editPrompt }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to edit asset');
       }
 
-      const result = await response.json();
-      setEditedAsset(result);
+      const newAsset: Asset = await response.json();
+
+      // Add assistant message
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Version ${newAsset.version} created with your changes.`,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Update version history
+      setVersionHistory((prev) => [...prev, newAsset]);
+      setCurrentVersionIndex(versionHistory.length); // Move to new version
+
+      // Notify parent of edit completion
+      onEditComplete();
     } catch (error) {
       console.error('Failed to edit asset:', error);
-      alert('Failed to edit asset. Please try again.');
+
+      // Add error message
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Failed to edit asset. Please try again.',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setEditing(false);
+      setIsGenerating(false);
     }
-  };
-
-  const handleSave = async () => {
-    if (!editedAsset) return;
-
-    // Save and close
-    onEditComplete();
-    onClose();
-  };
-
-  const handleReset = () => {
-    setEditedAsset(null);
-    setEditPrompt('');
   };
 
   if (!isOpen || !asset) return null;
 
+  const currentAsset = versionHistory[currentVersionIndex];
+  const canNavigateLeft = currentVersionIndex > 0;
+  const canNavigateRight = currentVersionIndex < versionHistory.length - 1;
+  const isAtLatestVersion = currentVersionIndex === versionHistory.length - 1;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
-              <Wand2 className="w-5 h-5 text-purple-600" />
+              <Sparkles className="w-5 h-5 text-purple-600" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Edit Asset with AI</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {asset.name}
+              </h2>
               <p className="text-sm text-gray-500">
-                Describe the changes you want to make
+                Iterative AI Editing • Chat to refine
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            disabled={editing}
+            disabled={isGenerating}
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* Asset Info */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <ImageIcon className="w-5 h-5 text-gray-400" />
-              <div>
-                <h3 className="font-medium text-gray-900">{asset.name}</h3>
-                <p className="text-sm text-gray-500">{asset.description}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Edit Prompt */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Edit Instructions
-              <span className="text-red-500 ml-1">*</span>
-            </label>
-            <textarea
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              disabled={editing || !!editedAsset}
-              rows={3}
-              placeholder="e.g., Add a red hat, Change background to blue sky, Make the character smile..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:opacity-50"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Describe what changes you want to make to the image
-            </p>
-          </div>
-
-          {/* Before/After Comparison */}
-          {showComparison && (
-            <div className="grid grid-cols-2 gap-4">
-              {/* Original */}
-              <div>
-                <div className="text-sm font-medium text-gray-700 mb-2">Original</div>
-                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                  <img
-                    src={asset.url}
-                    alt={asset.name}
-                    className="w-full h-full object-contain"
-                  />
+        {/* Main Content: Two-column layout */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Column: Image Preview (60%) */}
+          <div className="w-[60%] flex flex-col bg-gray-50 border-r border-gray-200">
+            {/* Version Navigation */}
+            <div className="p-4 bg-white border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentVersionIndex(0)}
+                    disabled={!canNavigateLeft || isLoadingLineage}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="First version (Home)"
+                  >
+                    <Home className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={() => navigateVersion(-1)}
+                    disabled={!canNavigateLeft || isLoadingLineage}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Previous version (←)"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={() => navigateVersion(1)}
+                    disabled={!canNavigateRight || isLoadingLineage}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Next version (→)"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentVersionIndex(versionHistory.length - 1)}
+                    disabled={!canNavigateRight || isLoadingLineage}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Latest version (End)"
+                  >
+                    <ChevronsRight className="w-4 h-4 text-gray-600" />
+                  </button>
                 </div>
-              </div>
 
-              {/* Edited */}
-              <div>
-                <div className="text-sm font-medium text-gray-700 mb-2">
-                  {editedAsset ? 'Edited' : 'Preview'}
-                </div>
-                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-                  {editedAsset ? (
-                    <img
-                      src={editedAsset.url}
-                      alt="Edited"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-center text-gray-400">
-                      <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Edited version will appear here</p>
-                    </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    Version {currentVersionIndex + 1} of {versionHistory.length}
+                  </span>
+                  {currentVersionIndex === 0 && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                      Original
+                    </span>
+                  )}
+                  {!isAtLatestVersion && (
+                    <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full">
+                      Viewing Past
+                    </span>
                   )}
                 </div>
               </div>
             </div>
-          )}
 
-          {/* Edit History */}
-          {asset.editHistory && asset.editHistory.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Edit History</h4>
-              <div className="space-y-2">
-                {asset.editHistory.map((edit, index) => (
-                  <div key={index} className="text-sm text-gray-600">
-                    <span className="font-medium">Edit {index + 1}:</span> {edit.prompt}
+            {/* Image Display */}
+            <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
+              {isLoadingLineage ? (
+                <div className="flex flex-col items-center gap-3 text-gray-400">
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                  <p className="text-sm">Loading version history...</p>
+                </div>
+              ) : currentAsset ? (
+                <div className="relative h-full w-full flex items-center justify-center">
+                  <img
+                    src={currentAsset.url}
+                    alt={currentAsset.name}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  />
+
+                  {/* Version Badge Overlay */}
+                  <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    <div className="px-3 py-1.5 bg-black bg-opacity-70 text-white text-sm rounded-lg font-medium">
+                      v{currentAsset.version}
+                    </div>
+
+                    {/* Show edit prompt for non-original versions */}
+                    {currentAsset.version > 1 && currentAsset.editHistory.length > 0 && (
+                      <div className="px-3 py-1.5 bg-purple-600 bg-opacity-90 text-white text-xs rounded-lg max-w-xs">
+                        {currentAsset.editHistory[currentAsset.editHistory.length - 1].editPrompt}
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Right Column: Chat Interface (40%) */}
+          <div className="w-[40%] flex flex-col bg-white">
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-lg p-3 ${
+                      message.role === 'user'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p
+                      className={`text-xs mt-1 ${
+                        message.role === 'user' ? 'text-purple-200' : 'text-gray-500'
+                      }`}
+                    >
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              {isGenerating && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 text-gray-900 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <p className="text-sm">Generating new version...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat Input */}
+            <div className="border-t border-gray-200 p-4 bg-gray-50">
+              {!isAtLatestVersion && (
+                <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs text-amber-800">
+                    You are viewing a past version. New edits will be based on Version {currentVersionIndex + 1}.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  disabled={isGenerating || isLoadingLineage}
+                  placeholder="Describe your edit (Cmd+Enter to send)..."
+                  rows={3}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!chatInput.trim() || isGenerating || isLoadingLineage}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                <div className="flex items-center gap-4">
+                  <span>← → Navigate versions</span>
+                  <span>/ Focus input</span>
+                </div>
+                <span>Cmd+Enter Send</span>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
-          <div>
-            {editedAsset && (
-              <button
-                onClick={handleReset}
-                disabled={editing}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              disabled={editing}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            {editedAsset ? (
-              <button
-                onClick={handleSave}
-                disabled={editing}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                Save Changes
-              </button>
-            ) : (
-              <button
-                onClick={handleEdit}
-                disabled={editing || !editPrompt.trim()}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {editing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Editing...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    Apply Edit
-                  </>
-                )}
-              </button>
-            )}
           </div>
         </div>
       </div>
