@@ -5,18 +5,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Edit2, Trash2, Eye, MoreVertical, Tag } from 'lucide-react';
+import { Edit2, Trash2, Eye, MoreVertical, Tag, Copy, Check, Sparkles } from 'lucide-react';
 import type { Asset } from '@/types/asset';
 
 interface AssetCardProps {
   asset: Asset;
   onDelete: (assetId: string) => void;
   onEdit: (assetId: string) => void;
+  onRegenerate?: (asset: Asset) => void;
 }
 
-export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
+export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: AssetCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const getTypeColor = (type: string): string => {
     switch (type) {
@@ -51,14 +53,14 @@ export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
   return (
     <div className="group relative bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
       {/* Image */}
-      <div className="relative aspect-video bg-gray-100">
+      <div className="relative aspect-[9/16] bg-gray-100">
         {!imageLoaded && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
           </div>
         )}
         <img
-          src={asset.imageUrl || '/placeholder-asset.png'}
+          src={asset.url || '/placeholder-asset.png'}
           alt={asset.name}
           className={`w-full h-full object-cover ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
@@ -73,7 +75,7 @@ export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
         {/* Overlay with actions (shown on hover) */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
           <button
-            onClick={() => window.open(asset.imageUrl, '_blank')}
+            onClick={() => window.open(asset.url, '_blank')}
             className="flex items-center justify-center w-10 h-10 bg-white rounded-full text-gray-700 hover:bg-gray-100 transition-colors"
             title="View full size"
           >
@@ -86,6 +88,15 @@ export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
           >
             <Edit2 className="w-5 h-5" />
           </button>
+          {onRegenerate && asset.generationPrompt && (
+            <button
+              onClick={() => onRegenerate(asset)}
+              className="flex items-center justify-center w-10 h-10 bg-white rounded-full text-indigo-600 hover:bg-gray-100 transition-colors"
+              title="Regenerate asset"
+            >
+              <Sparkles className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => onDelete(asset.id)}
             className="flex items-center justify-center w-10 h-10 bg-white rounded-full text-red-600 hover:bg-gray-100 transition-colors"
@@ -107,7 +118,7 @@ export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
         </div>
 
         {/* Provider badge */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
           <span
             className={`px-2 py-1 text-xs font-medium rounded ${getProviderColor(
               asset.provider
@@ -127,6 +138,27 @@ export default function AssetCard({ asset, onDelete, onEdit }: AssetCardProps) {
           <p className="text-sm text-gray-500 mb-3 line-clamp-2" title={asset.description}>
             {asset.description}
           </p>
+        )}
+
+        {/* Generation Prompt - if available */}
+        {asset.generationPrompt && (
+          <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-gray-700">Prompt</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(asset.generationPrompt!);
+                  setCopiedPrompt(true);
+                  setTimeout(() => setCopiedPrompt(false), 2000);
+                }}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+                title="Copy prompt"
+              >
+                {copiedPrompt ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </div>
+            <p className="text-xs text-gray-600 line-clamp-3">{asset.generationPrompt}</p>
+          </div>
         )}
 
         {/* Tags */}

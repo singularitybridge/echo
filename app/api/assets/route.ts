@@ -22,6 +22,10 @@ import {
 } from '@/services/thumbnailGenerator';
 import { generateImage } from '@/services/imageService';
 
+// App Router configuration
+export const maxDuration = 300; // 5 minutes for image generation
+export const dynamic = 'force-dynamic';
+
 /**
  * Sort assets based on query parameters
  */
@@ -143,7 +147,30 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as CreateAssetRequest;
+    let body: CreateAssetRequest;
+
+    try {
+      // Read the entire body as text first to handle large payloads
+      const textBody = await request.text();
+
+      // Check size (50MB limit)
+      const sizeInMB = textBody.length / (1024 * 1024);
+      if (sizeInMB > 50) {
+        return NextResponse.json(
+          { error: `Request body too large: ${sizeInMB.toFixed(2)}MB (max 50MB)` },
+          { status: 413 }
+        );
+      }
+
+      // Parse JSON manually
+      body = JSON.parse(textBody) as CreateAssetRequest;
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body. The request may be too large or malformed.' },
+        { status: 400 }
+      );
+    }
 
     if (!body.projectId || !body.type || !body.name) {
       return NextResponse.json(
@@ -185,9 +212,17 @@ export async function POST(request: NextRequest) {
       // Download from URL
       console.log('Downloading image from URL for asset:', body.name);
 
-      const response = await fetch(body.imageUrl);
+      // Convert relative URLs to absolute URLs for server-side fetch
+      let imageUrl = body.imageUrl;
+      if (imageUrl.startsWith('/')) {
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const host = request.headers.get('host') || 'localhost:3039';
+        imageUrl = `${protocol}://${host}${imageUrl}`;
+      }
+
+      const response = await fetch(imageUrl);
       if (!response.ok) {
-        throw new Error(`Failed to download image from ${body.imageUrl}`);
+        throw new Error(`Failed to download image from ${imageUrl}`);
       }
 
       imageBuffer = Buffer.from(await response.arrayBuffer());

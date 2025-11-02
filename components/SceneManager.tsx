@@ -137,6 +137,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     const loadCharacterRefs = async () => {
       const aspectRatio = (project.aspectRatio ?? AspectRatio.PORTRAIT) === AspectRatio.PORTRAIT ? '9:16' : '16:9';
 
+      // Sync both story storage and legacy refs to database (so they appear in asset library)
+      await Promise.all([
+        AssetLoader.syncStoryStorageToDatabase(projectId, aspectRatio),
+        AssetLoader.syncLegacyRefsToDatabase(projectId, aspectRatio),
+      ]);
+
       // Load from both story storage and legacy refs
       const storyStorageRefs = await AssetLoader.loadStoryStorageCharacterRefs(projectId);
       const legacyRefs = await AssetLoader.loadLegacyCharacterRefs(projectId, aspectRatio);
@@ -1133,13 +1139,77 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       <source src={selectedScene.videoUrl} type="video/mp4" />
                       Your browser does not support the video tag.
                     </video>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-12">
-                      <Radio className="w-16 h-16 text-indigo-400 mb-4" />
-                      <p className="text-gray-700 text-lg font-medium">No video generated</p>
-                      <p className="text-gray-500 text-sm mt-2">Use the controls on the right to generate</p>
-                    </div>
-                  )}
+                  ) : (() => {
+                    // Show start frame preview when no video exists
+                    const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+                    const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
+                    const isPrevious = currentRef === 'previous';
+
+                    // Recursive function to find the start frame by walking back through scenes
+                    const findStartFrame = (index: number): string | undefined => {
+                      if (index < 0) return undefined;
+
+                      const scene = scenes[index];
+                      const ref = scene.referenceMode ?? (index === 0 ? 1 : 'previous');
+
+                      // If this scene uses an asset reference, return it
+                      if (typeof ref === 'number') {
+                        const refIndex = ref - 1;
+                        if (refIndex >= 0 && refIndex < combinedRefs.length) {
+                          return combinedRefs[refIndex].objectUrl;
+                        }
+                      }
+
+                      // If this scene has a generated video with last frame, return it
+                      if (scene.lastFrameDataUrl) {
+                        return scene.lastFrameDataUrl;
+                      }
+
+                      // Otherwise, recurse to previous scene
+                      return findStartFrame(index - 1);
+                    };
+
+                    // Get the start frame image URL
+                    let startFrameUrl: string | undefined;
+                    if (!isPrevious && typeof currentRef === 'number') {
+                      // Use selected reference asset
+                      const refIndex = currentRef - 1;
+                      if (refIndex >= 0 && refIndex < combinedRefs.length) {
+                        startFrameUrl = combinedRefs[refIndex].objectUrl;
+                      }
+                    } else if (isPrevious && sceneIndex > 0) {
+                      // Walk back through previous scenes to find a start frame
+                      startFrameUrl = findStartFrame(sceneIndex - 1);
+                    }
+
+                    return startFrameUrl ? (
+                      <div className="flex flex-col items-center justify-center p-8 space-y-4">
+                        <div className="relative max-w-sm">
+                          <img
+                            src={startFrameUrl}
+                            alt="Start frame preview"
+                            className="max-h-[60vh] max-w-full rounded-lg shadow-xl border-2 border-indigo-200"
+                          />
+                          <div className="absolute top-2 left-2 bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+                            Start Frame Preview
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-gray-700 text-lg font-medium">No video generated</p>
+                          <p className="text-gray-500 text-sm mt-1">
+                            {isPrevious ? 'Will continue from previous shot' : `Using Asset ${currentRef}`}
+                          </p>
+                          <p className="text-gray-400 text-xs mt-1">Use the controls on the right to generate</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-12">
+                        <Radio className="w-16 h-16 text-indigo-400 mb-4" />
+                        <p className="text-gray-700 text-lg font-medium">No video generated</p>
+                        <p className="text-gray-500 text-sm mt-2">Use the controls on the right to generate</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

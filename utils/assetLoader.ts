@@ -182,4 +182,141 @@ export class AssetLoader {
       return [];
     }
   }
+
+  /**
+   * Sync legacy character refs to asset database
+   * This ensures legacy refs show up in the asset library
+   */
+  static async syncLegacyRefsToDatabase(
+    projectId: string,
+    aspectRatio: '9:16' | '16:9' = '9:16'
+  ): Promise<{ synced: number; skipped: number }> {
+    let synced = 0;
+    let skipped = 0;
+
+    try {
+      // Load legacy refs and existing database assets
+      const [legacyRefs, existingAssets] = await Promise.all([
+        this.loadLegacyCharacterRefs(projectId, aspectRatio),
+        this.loadProjectAssets(projectId),
+      ]);
+
+      if (legacyRefs.length === 0) {
+        return { synced: 0, skipped: 0 };
+      }
+
+      // Check which refs are already in database by checking tags
+      const hasLegacyTag = existingAssets.some(a => a.tags.includes('legacy-ref'));
+      if (hasLegacyTag) {
+        // Already synced, skip all
+        return { synced: 0, skipped: legacyRefs.length };
+      }
+
+      for (const ref of legacyRefs) {
+        try {
+          // Create asset entry for legacy ref
+          // Use imageUrl to download and save the image
+          const response = await fetch('/api/assets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              type: 'character',
+              name: `Character Reference ${ref.id.replace('legacy-ref-', '')}`,
+              description: `Legacy character reference imported from /generated-refs`,
+              aspectRatio: ref.aspectRatio || aspectRatio,
+              imageUrl: ref.objectUrl, // API will download this URL
+              tags: ['legacy-ref', 'character'],
+            }),
+          });
+
+          if (response.ok) {
+            synced++;
+          } else {
+            const error = await response.json();
+            console.error(`Failed to sync legacy ref ${ref.id}:`, error);
+          }
+        } catch (error) {
+          console.error(`Failed to sync legacy ref ${ref.id}:`, error);
+        }
+      }
+
+      console.log(`Synced ${synced} legacy refs to database (${skipped} already existed)`);
+    } catch (error) {
+      console.error('Failed to sync legacy refs:', error);
+    }
+
+    return { synced, skipped };
+  }
+
+  /**
+   * Sync story storage assets to asset database
+   * This ensures story storage assets show up in the asset library
+   */
+  static async syncStoryStorageToDatabase(
+    projectId: string,
+    aspectRatio: '9:16' | '16:9' = '9:16'
+  ): Promise<{ synced: number; skipped: number }> {
+    let synced = 0;
+    let skipped = 0;
+
+    try {
+      // Load story storage refs and existing database assets
+      const [storyRefs, existingAssets] = await Promise.all([
+        this.loadStoryStorageCharacterRefs(projectId),
+        this.loadProjectAssets(projectId),
+      ]);
+
+      if (storyRefs.length === 0) {
+        return { synced: 0, skipped: 0 };
+      }
+
+      // Check which refs are already in database by checking tags
+      const hasStoryStorageTag = existingAssets.some(a => a.tags.includes('story-storage'));
+      if (hasStoryStorageTag) {
+        // Already synced, skip all
+        return { synced: 0, skipped: storyRefs.length };
+      }
+
+      for (let i = 0; i < storyRefs.length; i++) {
+        const ref = storyRefs[i];
+
+        try {
+          // Extract filename from asset path
+          const filename = ref.objectUrl.split('/').pop() || '';
+
+          // Create asset entry for story storage ref
+          // Use imageUrl to download and save the image
+          const response = await fetch('/api/assets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              type: 'character',
+              name: `Character ${i + 1}`,
+              description: `Character reference from story storage: ${filename}`,
+              aspectRatio,
+              imageUrl: ref.objectUrl, // API will download this URL
+              tags: ['story-storage', 'character'],
+            }),
+          });
+
+          if (response.ok) {
+            synced++;
+          } else {
+            const error = await response.json();
+            console.error(`Failed to sync story storage ref ${ref.id}:`, error);
+          }
+        } catch (error) {
+          console.error(`Failed to sync story storage ref ${ref.id}:`, error);
+        }
+      }
+
+      console.log(`Synced ${synced} story storage refs to database (${skipped} already existed)`);
+    } catch (error) {
+      console.error('Failed to sync story storage refs:', error);
+    }
+
+    return { synced, skipped };
+  }
 }
