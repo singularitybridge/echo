@@ -43,6 +43,7 @@ export default function EditAssetModal({
   const [chatInput, setChatInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -179,6 +180,62 @@ export default function EditAssetModal({
     }
   };
 
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const currentAsset = versionHistory[currentVersionIndex];
+
+      // Update the original asset with the current version
+      const response = await fetch(`/api/assets/${asset.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: currentAsset.url,
+          thumbnailUrl: currentAsset.thumbnailUrl,
+          editHistory: currentAsset.editHistory,
+          version: currentAsset.version,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save asset');
+      }
+
+      onEditComplete();
+      onClose();
+    } catch (error) {
+      console.error('Failed to save asset:', error);
+      alert('Failed to save asset. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAsNew = async () => {
+    setIsSaving(true);
+    try {
+      const currentAsset = versionHistory[currentVersionIndex];
+
+      // Create a new asset based on the current version
+      const response = await fetch(`/api/assets/${currentAsset.id}/save-as-new`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save as new asset');
+      }
+
+      onEditComplete();
+      onClose();
+    } catch (error) {
+      console.error('Failed to save as new asset:', error);
+      alert('Failed to save as new asset. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isGenerating) return;
 
@@ -212,7 +269,7 @@ export default function EditAssetModal({
       // Add assistant message
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: `Version ${newAsset.version} created with your changes.`,
+        content: `Changes applied successfully. Click "Save" to update this asset or "Save as New" to create a new version.`,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -220,9 +277,6 @@ export default function EditAssetModal({
       // Update version history
       setVersionHistory((prev) => [...prev, newAsset]);
       setCurrentVersionIndex(versionHistory.length); // Move to new version
-
-      // Notify parent of edit completion
-      onEditComplete();
     } catch (error) {
       console.error('Failed to edit asset:', error);
 
@@ -263,13 +317,31 @@ export default function EditAssetModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            disabled={isGenerating}
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSaveAsNew}
+              disabled={isGenerating || isSaving || currentVersionIndex === 0}
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Save as New
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isGenerating || isSaving || currentVersionIndex === 0}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Save
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={isGenerating || isSaving}
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
         </div>
 
         {/* Main Content: Two-column layout */}

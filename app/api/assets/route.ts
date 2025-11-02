@@ -90,6 +90,8 @@ export async function GET(request: NextRequest) {
       projectId,
       type: searchParams.get('type') as any,
       tags: searchParams.getAll('tags'),
+      // Hide intermediate AI-generated versions (only show root assets)
+      parentAssetId: null,
     };
 
     // Load assets using the new storage service
