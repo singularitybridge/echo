@@ -17,6 +17,8 @@ import {
   Film,
   Check,
   RefreshCw,
+  Upload,
+  Wand2,
 } from 'lucide-react';
 import {
   Genre,
@@ -27,6 +29,7 @@ import {
   StoryDraft,
   GeneratedScene,
 } from '../types/story-creation';
+import UploadAssetModal from './assets/UploadAssetModal';
 
 interface CreateStoryModalProps {
   isOpen: boolean;
@@ -34,7 +37,7 @@ interface CreateStoryModalProps {
   onStoryCreated: (story: StoryDraft) => void;
 }
 
-type Step = 'choice' | 'quick' | 'custom' | 'edit';
+type Step = 'choice' | 'quick' | 'custom' | 'character-method' | 'edit';
 
 export default function CreateStoryModal({
   isOpen,
@@ -54,6 +57,11 @@ export default function CreateStoryModal({
   const [concept, setConcept] = useState('');
   const [character, setCharacter] = useState('');
   const [mood, setMood] = useState('');
+
+  // Character creation method
+  const [characterMethod, setCharacterMethod] = useState<'upload' | 'generate' | null>(null);
+  const [uploadedCharacterAssetId, setUploadedCharacterAssetId] = useState<string | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Generated story (for editing)
   const [storyDraft, setStoryDraft] = useState<StoryDraft | null>(null);
@@ -134,6 +142,14 @@ export default function CreateStoryModal({
   const handleBack = () => {
     if (step === 'edit') {
       setStoryDraft(null);
+      if (generationMode === 'custom') {
+        setStep('character-method');
+      } else {
+        setStep('quick');
+      }
+    } else if (step === 'character-method') {
+      setStep('custom');
+    } else if (step === 'quick' || step === 'custom') {
       setStep('choice');
     } else {
       setStep('choice');
@@ -255,6 +271,9 @@ export default function CreateStoryModal({
     setConcept('');
     setCharacter('');
     setMood('');
+    setCharacterMethod(null);
+    setUploadedCharacterAssetId(null);
+    setShowUploadModal(false);
     setStoryDraft(null);
     setError(null);
     onClose();
@@ -284,7 +303,7 @@ export default function CreateStoryModal({
               </button>
             )}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <div className="flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
@@ -292,12 +311,14 @@ export default function CreateStoryModal({
                   {step === 'choice' && 'Create New Story'}
                   {step === 'quick' && 'Quick Start'}
                   {step === 'custom' && 'Custom Story'}
+                  {step === 'character-method' && 'Character Setup'}
                   {step === 'edit' && 'Preview Your Story'}
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {step === 'choice' && 'Choose your creative approach'}
                   {step === 'quick' && 'Select genre, type, and energy'}
                   {step === 'custom' && 'Describe your concept'}
+                  {step === 'character-method' && 'Upload or generate character'}
                   {step === 'edit' && 'Review your generated screenplay'}
                 </p>
               </div>
@@ -532,7 +553,117 @@ export default function CreateStoryModal({
             </div>
           )}
 
-          {/* Step 3: Custom Story Form */}
+          {/* Step 3: Character Method Selection */}
+          {step === 'character-method' && (
+            <div className="space-y-6 max-w-2xl mx-auto">
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  How would you like to create your character?
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Upload a photo or let AI generate character references
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Upload Character Card */}
+                <button
+                  onClick={() => {
+                    setCharacterMethod('upload');
+                    setShowUploadModal(true);
+                  }}
+                  className={`group relative bg-gradient-to-br from-blue-50 to-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
+                    characterMethod === 'upload' && uploadedCharacterAssetId
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-blue-200 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex flex-col h-full">
+                    <div className="mb-4">
+                      <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                        <Upload className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">Upload Photo</h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Use your own character image or photo for reference
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Use your own images</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Full creative control</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Instant results</span>
+                      </div>
+                    </div>
+
+                    {characterMethod === 'upload' && uploadedCharacterAssetId && (
+                      <div className="mt-auto p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-green-700">
+                          <Check className="w-4 h-4" />
+                          <span className="font-medium">Character uploaded</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </button>
+
+                {/* Generate Character Card */}
+                <button
+                  onClick={() => {
+                    setCharacterMethod('generate');
+                  }}
+                  className={`group relative bg-gradient-to-br from-purple-50 to-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
+                    characterMethod === 'generate'
+                      ? 'border-purple-600 bg-purple-50'
+                      : 'border-purple-200 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex flex-col h-full">
+                    <div className="mb-4">
+                      <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                        <Wand2 className="w-8 h-8 text-purple-600" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">Generate with AI</h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Let AI create character references based on your description
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>AI-generated art</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Multiple variations</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Perfect consistency</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Custom Story Form */}
           {step === 'custom' && (
             <div className="space-y-6 max-w-2xl mx-auto">
               {/* Illustration */}
@@ -841,10 +972,30 @@ export default function CreateStoryModal({
         {/* Footer - Show for all steps except edit (which has its own footer) */}
         {step !== 'edit' && (
           <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-            {/* Back button - show for quick and custom steps */}
-            {(step === 'quick' || step === 'custom') && (
+            {/* Back button - show for quick, custom, and character-method steps */}
+            {step === 'quick' && (
               <button
                 onClick={() => setStep('choice')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+            )}
+
+            {step === 'custom' && (
+              <button
+                onClick={() => setStep('choice')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+            )}
+
+            {step === 'character-method' && (
+              <button
+                onClick={() => setStep('custom')}
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -887,8 +1038,19 @@ export default function CreateStoryModal({
 
               {step === 'custom' && (
                 <button
+                  onClick={() => setStep('character-method')}
+                  disabled={!concept.trim()}
+                  className="px-6 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  Continue
+                </button>
+              )}
+
+              {step === 'character-method' && (
+                <button
                   onClick={handleGenerateCustom}
-                  disabled={!concept.trim() || isGenerating}
+                  disabled={!characterMethod || isGenerating}
                   className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isGenerating ? (
@@ -908,6 +1070,21 @@ export default function CreateStoryModal({
           </div>
         )}
       </div>
+
+      {/* Upload Asset Modal */}
+      {showUploadModal && (
+        <UploadAssetModal
+          isOpen={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          projectId={storyDraft?.projectMetadata.id || `temp-${Date.now()}`}
+          onUploadComplete={() => {
+            setShowUploadModal(false);
+            // TODO: Get the uploaded asset ID from the upload response
+            // For now, just mark as uploaded
+            setUploadedCharacterAssetId(`uploaded-${Date.now()}`);
+          }}
+        />
+      )}
     </div>
   );
 }

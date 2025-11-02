@@ -252,9 +252,9 @@ const ProjectList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white">
+      <header className="bg-white">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start gap-3">
@@ -279,12 +279,6 @@ const ProjectList: React.FC = () => {
 
       {/* Project Grid */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stories Section */}
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Your Stories</h2>
-          <p className="text-sm text-gray-600">Select a story to continue working on it</p>
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => {
             const thumbnail = thumbnails[project.id];
@@ -388,10 +382,14 @@ const ProjectList: React.FC = () => {
 
         {projects.length === 0 && (
           <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-              <Film className="w-8 h-8 text-gray-400" />
+            <div className="mb-6">
+              <img
+                src="/empty-state.png"
+                alt="No stories"
+                className="w-64 h-64 mx-auto"
+              />
             </div>
-            <p className="text-gray-600 text-lg">No stories found</p>
+            <p className="text-gray-600 text-lg font-medium">No stories found</p>
             <p className="text-gray-500 text-sm mt-1">Create your first story to get started</p>
           </div>
         )}
