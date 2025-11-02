@@ -33,7 +33,7 @@ interface PreviousAsset {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { message, previousAssets, conversationHistory } = await request.json();
+    const { message, aspectRatio, previousAssets, conversationHistory } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -52,6 +52,11 @@ export async function POST(request: NextRequest) {
 
     // Parse user intent from message
     const intent = parseUserIntent(message, previousAssets, conversationHistory);
+
+    // Override aspect ratio if provided
+    if (aspectRatio) {
+      intent.aspectRatio = aspectRatio as '1:1' | '16:9' | '9:16';
+    }
 
     // Generate assets if needed
     let assets: any[] = [];

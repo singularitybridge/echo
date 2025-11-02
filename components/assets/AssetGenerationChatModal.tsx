@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Sparkles, Check, Loader2, Send, Edit3, Download } from 'lucide-react';
+import { X, Sparkles, Check, Loader2, Edit3, Download, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import type { AssetType, AssetProvider } from '@/types/asset';
 import type { AspectRatio } from '@/types/project';
 
@@ -55,15 +55,62 @@ export default function AssetGenerationChatModal({
   const [chatInput, setChatInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedAssets, setGeneratedAssets] = useState<GeneratedAsset[]>([]);
+  const [currentAssetIndex, setCurrentAssetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-grow textarea
+  useEffect(() => {
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = 'auto';
+      chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`;
+    }
+  }, [chatInput]);
+
+  // Reset current asset index when new assets are added
+  useEffect(() => {
+    if (generatedAssets.length > 0 && currentAssetIndex >= generatedAssets.length) {
+      setCurrentAssetIndex(generatedAssets.length - 1);
+    }
+  }, [generatedAssets.length, currentAssetIndex]);
+
+  // Keyboard shortcuts for arrow navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Arrow navigation only when textarea is not focused
+      if (document.activeElement === chatInputRef.current) return;
+
+      if (generatedAssets.length === 0) return;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          setCurrentAssetIndex(prev => Math.max(0, prev - 1));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          setCurrentAssetIndex(prev => Math.min(generatedAssets.length - 1, prev + 1));
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, generatedAssets.length]);
+
   if (!isOpen) return null;
+
+  const currentAsset = generatedAssets[currentAssetIndex];
+  const canNavigateLeft = currentAssetIndex > 0;
+  const canNavigateRight = currentAssetIndex < generatedAssets.length - 1;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +135,7 @@ export default function AssetGenerationChatModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMessage,
+          aspectRatio: '9:16', // Use portrait aspect ratio
           previousAssets: generatedAssets.map(a => ({
             id: a.id,
             metadata: a.metadata,
@@ -238,10 +286,10 @@ export default function AssetGenerationChatModal({
           </button>
         </div>
 
-        {/* Main Content: 2-Column Layout */}
+        {/* Main Content: 60/40 Split Layout */}
         <div className="flex-1 overflow-hidden flex">
-          {/* Left: Asset Preview Grid */}
-          <div className="flex-1 overflow-y-auto p-8 bg-gray-50">
+          {/* Left: Image Gallery (60%) */}
+          <div className="w-[60%] bg-gray-50 flex flex-col">
             {generatedAssets.length === 0 ? (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
@@ -255,72 +303,82 @@ export default function AssetGenerationChatModal({
                 </div>
               </div>
             ) : (
-              <div>
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-1">
-                    Generated Assets ({generatedAssets.length})
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Click to select assets for saving ({selectedCount} selected)
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  {generatedAssets.map(asset => (
-                    <div
-                      key={asset.id}
-                      className={`group relative border-2 rounded-lg overflow-hidden transition-all cursor-pointer ${
-                        asset.selected
-                          ? 'border-indigo-600 ring-2 ring-indigo-600 ring-offset-2'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => toggleSelection(asset.id)}
-                    >
-                      <div className="aspect-video bg-gray-100 relative">
-                        <img
-                          src={asset.imageUrl}
-                          alt={`Asset ${asset.id}`}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-
-                        {/* Selection Indicator */}
-                        <div
-                          className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            asset.selected
-                              ? 'bg-indigo-600'
-                              : 'bg-white border-2 border-gray-300 group-hover:border-gray-400'
-                          }`}
-                        >
-                          {asset.selected && <Check className="w-4 h-4 text-white" />}
-                        </div>
-
-                        {/* Download Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(asset);
-                          }}
-                          className="absolute bottom-2 right-2 p-2 bg-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100"
-                        >
-                          <Download className="w-4 h-4 text-gray-700" />
-                        </button>
-                      </div>
-
-                      <div className="p-2 bg-white">
-                        <p className="text-xs text-gray-600 truncate">
-                          {asset.metadata.type} • {asset.metadata.aspectRatio}
-                        </p>
-                      </div>
+              <>
+                {/* Navigation Bar */}
+                <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentAssetIndex(prev => Math.max(0, prev - 1))}
+                        disabled={!canNavigateLeft}
+                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Previous (←)"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentAssetIndex(prev => Math.min(generatedAssets.length - 1, prev + 1))}
+                        disabled={!canNavigateRight}
+                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Next (→)"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
                     </div>
-                  ))}
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-700">
+                        {currentAssetIndex + 1} of {generatedAssets.length}
+                      </span>
+                      <button
+                        onClick={() => toggleSelection(currentAsset.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          currentAsset.selected
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {currentAsset.selected ? (
+                          <>
+                            <Check className="w-4 h-4 inline mr-1" />
+                            Selected
+                          </>
+                        ) : (
+                          'Select'
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleDownload(currentAsset)}
+                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+
+                {/* Large Image Display */}
+                <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
+                  <div className="relative h-full w-full flex items-center justify-center">
+                    <img
+                      src={currentAsset.imageUrl}
+                      alt={currentAsset.metadata.type}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                    />
+
+                    {/* Metadata Badge */}
+                    <div className="absolute top-3 left-3 px-3 py-1.5 bg-black bg-opacity-70 text-white text-sm rounded-lg font-medium">
+                      {currentAsset.metadata.type} • {currentAsset.metadata.aspectRatio}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
-          {/* Right: Chat Panel */}
-          <div className="w-96 border-l border-gray-200 bg-gray-50 flex flex-col">
+          {/* Right: Chat Panel (40%) */}
+          <div className="w-[40%] border-l border-gray-200 bg-gray-50 flex flex-col">
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -381,22 +439,25 @@ export default function AssetGenerationChatModal({
               onSubmit={handleSubmit}
               className="p-4 border-t border-gray-200 bg-white flex-shrink-0"
             >
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-end">
                 <textarea
+                  ref={chatInputRef}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  rows={2}
+                  rows={1}
                   placeholder="Type your message... (Cmd+Enter to send)"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm min-h-[40px] max-h-[120px] overflow-y-auto"
                   disabled={isGenerating}
+                  style={{ height: 'auto' }}
                 />
                 <button
                   type="submit"
                   disabled={!chatInput.trim() || isGenerating}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  title="Send message (Cmd+Enter)"
                 >
-                  <Send className="w-4 h-4" />
+                  <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
             </form>

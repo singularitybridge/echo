@@ -7,13 +7,13 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   X,
-  Send,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Home,
   ChevronsRight,
   Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import type { Asset } from '@/types/asset';
 
@@ -108,6 +108,14 @@ export default function EditAssetModal({
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = 'auto';
+      chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`;
+    }
+  }, [chatInput]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -504,7 +512,7 @@ export default function EditAssetModal({
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-end">
                 <textarea
                   ref={chatInputRef}
                   value={chatInput}
@@ -517,18 +525,20 @@ export default function EditAssetModal({
                   }}
                   disabled={isGenerating || isLoadingLineage}
                   placeholder="Describe your edit (Cmd+Enter to send)..."
-                  rows={3}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
+                  rows={1}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm min-h-[40px] max-h-[120px] overflow-y-auto"
+                  style={{ height: 'auto' }}
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!chatInput.trim() || isGenerating || isLoadingLineage}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  title="Send message (Cmd+Enter)"
                 >
                   {isGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    <Send className="w-4 h-4" />
+                    <ArrowRight className="w-5 h-5" />
                   )}
                 </button>
               </div>

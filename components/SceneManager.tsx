@@ -143,12 +143,17 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         AssetLoader.syncLegacyRefsToDatabase(projectId, aspectRatio),
       ]);
 
-      // Load from both story storage and legacy refs
-      const storyStorageRefs = await AssetLoader.loadStoryStorageCharacterRefs(projectId);
-      const legacyRefs = await AssetLoader.loadLegacyCharacterRefs(projectId, aspectRatio);
+      // Load from unified asset database first, then fall back to story storage and legacy
+      const dbAssets = await AssetLoader.loadProjectAssets(projectId);
+      const dbRefs = AssetLoader.assetsToAssetReferences(dbAssets);
 
-      // Combine all refs (story storage first, then legacy)
-      const allRefs = [...storyStorageRefs, ...legacyRefs];
+      // Only load story storage and legacy if no database assets
+      let allRefs = dbRefs;
+      if (dbRefs.length === 0) {
+        const storyStorageRefs = await AssetLoader.loadStoryStorageCharacterRefs(projectId);
+        const legacyRefs = await AssetLoader.loadLegacyCharacterRefs(projectId, aspectRatio);
+        allRefs = [...storyStorageRefs, ...legacyRefs];
+      }
 
       // Convert to full GeneratedImage format with blob data for video generation
       const refs: GeneratedImage[] = [];
@@ -184,7 +189,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       }
 
       setCharacterRefs(refs);
-      console.log(`Loaded ${refs.length} ${aspectRatio} character reference images (${storyStorageRefs.length} from story storage + ${legacyRefs.length} legacy)`);
+      const source = dbRefs.length > 0 ? 'database' : 'story storage/legacy';
+      console.log(`Loaded ${refs.length} ${aspectRatio} character reference images from ${source}`);
     };
 
     loadCharacterRefs();
@@ -949,10 +955,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           {project && (
             <button
               onClick={() => setShowProjectSettings(true)}
-              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Story Settings"
             >
-              <Settings2 className="w-4 h-4" />
-              <span className="text-sm font-medium">Story Settings</span>
+              <Settings2 className="w-5 h-5" />
             </button>
           )}
 
@@ -960,18 +966,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           <button
             onClick={handleExportVideo}
             disabled={isExporting || !project?.scenes.some(s => s.generated && s.videoUrl)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            className="p-2 text-green-600 hover:bg-green-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-lg transition-colors"
+            title={isExporting ? "Exporting..." : "Export Video"}
           >
             {isExporting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Exporting...</span>
-              </>
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <>
-                <Download className="w-4 h-4" />
-                <span>Export Video</span>
-              </>
+              <Download className="w-5 h-5" />
             )}
           </button>
 
