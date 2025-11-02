@@ -25,9 +25,18 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
   const [error, setError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [justGenerated, setJustGenerated] = useState(false);
 
   // Load existing images from public/generated-refs/{projectId} based on aspect ratio
   React.useEffect(() => {
+    // Skip loading if we just generated images in this session
+    if (justGenerated) return;
+
+    // Skip loading if we already have images with blob URLs (freshly generated)
+    if (generatedImages.length > 0 && generatedImages.every(img => img.objectUrl.startsWith('blob:'))) {
+      return;
+    }
+
     const loadExistingImages = async () => {
       const existingImages: GeneratedImage[] = [];
       const aspectRatioKey = aspectRatio === '16:9' ? 'landscape' : 'portrait';
@@ -73,7 +82,7 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
     };
 
     loadExistingImages();
-  }, [projectId, aspectRatio]);
+  }, [projectId, aspectRatio, justGenerated, generatedImages]);
 
   // Keyboard navigation for modal
   React.useEffect(() => {
@@ -110,6 +119,7 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
         aspectRatio
       );
       setGeneratedImages(images);
+      setJustGenerated(true);
 
       // Auto-save generated images
       await saveReferences(images);

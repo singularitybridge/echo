@@ -65,6 +65,7 @@ export default function AssetGenerationFlowModal({
   const [designOptions, setDesignOptions] = useState<DesignOption[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<string | null>(null);
   const [generatingDesigns, setGeneratingDesigns] = useState(false);
+  const [justGeneratedDesigns, setJustGeneratedDesigns] = useState(false);
 
   // Pose step
   const [poseOptions, setPoseOptions] = useState<PoseOption[]>([]);
@@ -80,10 +81,18 @@ export default function AssetGenerationFlowModal({
 
   // Auto-generate designs when modal opens
   useEffect(() => {
+    // Skip if we just generated designs
+    if (justGeneratedDesigns) return;
+
+    // Skip if we already have designs with blob URLs
+    if (designOptions.length > 0 && designOptions.every(d => d.imageUrl.startsWith('blob:'))) {
+      return;
+    }
+
     if (isOpen && step === 'design' && designOptions.length === 0) {
       generateDesignOptions();
     }
-  }, [isOpen, step]);
+  }, [isOpen, step, justGeneratedDesigns, designOptions]);
 
   // Generate poses when moving to pose step OR when selected design changes
   useEffect(() => {
@@ -141,6 +150,7 @@ export default function AssetGenerationFlowModal({
       );
 
       setDesignOptions(designs);
+      setJustGeneratedDesigns(true);
     } catch (error) {
       console.error('Failed to generate design options:', error);
       alert('Failed to generate character designs. Please try again.');
