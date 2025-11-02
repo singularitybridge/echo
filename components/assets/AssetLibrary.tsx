@@ -21,7 +21,7 @@ import type { Asset, AssetType, AssetLibraryResponse, AssetProvider } from '@/ty
 import type { AspectRatio } from '@/types/project';
 import { assetStorage } from '@/services/assetStorage.server';
 import AssetCard from './AssetCard';
-import GenerateAssetModal from './GenerateAssetModal';
+import AssetGenerationChatModal from './AssetGenerationChatModal';
 import UploadAssetModal from './UploadAssetModal';
 import EditAssetModal from './EditAssetModal';
 
@@ -307,7 +307,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
       </div>
 
       {/* Generate Asset Modal */}
-      <GenerateAssetModal
+      <AssetGenerationChatModal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
         projectId={projectId}
