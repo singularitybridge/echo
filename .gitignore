@@ -36,9 +36,43 @@ out/
 public/videos/
 public/evaluations/
 public/generated-refs/
+public/assets/
+public/docs/
+public/empty-state-*.png
+public/logo*.png
+public/test-*.html
+public/test-*.png
+public/favicon.ico
 
 # Runtime data directory (lowdb)
 data/
 
+# Stories and generated content
+stories/
+
+# Test scripts and generated utilities
+test-*.js
+test-*.cjs
+test-*.json
+*-test.js
+*-test.cjs
+add-*.cjs
+generate-*.cjs
+generate-*.js
+migrate-*.cjs
+fix-*.cjs
+transcribe-*.cjs
+transcribe-*.js
+update-*.js
+crop-*.mjs
+resize-*.py
+trim-*.py
+*.json.tmp
+ferret-horror.json
+
+# Documentation (if generated)
+docs/
+
 # Temporary files
 temp/
+*.json.tmp

@@ -4,9 +4,10 @@ const nextConfig = {
   env: {
     VITE_GEMINI_API_KEY: process.env.VITE_GEMINI_API_KEY,
   },
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
+  // App Router: Configure experimental features for body size
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
     },
   },
 };
