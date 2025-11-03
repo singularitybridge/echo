@@ -127,7 +127,7 @@ Return ONLY the response text, no JSON or markdown.`;
       prompt,
       temperature: 0.7, // Medium temperature for natural language
       maxTokens: 200,
-      model: 'gemini-2.0-flash-exp', // Use standard flash for quick responses
+      model: 'gemini-2.0-flash', // Use stable Gemini 2.0 Flash
     });
 
     const userResponse = response.trim();

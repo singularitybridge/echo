@@ -170,7 +170,21 @@ export const generateVideo = async (
     const videos = operation.response.generatedVideos;
 
     if (!videos || videos.length === 0) {
-      throw new Error('No videos were generated.');
+      console.error('Operation completed but no videos generated:', JSON.stringify(operation, null, 2));
+
+      // Check if there's an error in the operation
+      if (operation.error) {
+        throw new Error(`Video generation failed: ${operation.error.message || JSON.stringify(operation.error)}`);
+      }
+
+      // Check for RAI (Responsible AI) filtering
+      if (operation.response.raiMediaFilteredCount && operation.response.raiMediaFilteredCount > 0) {
+        const reasons = operation.response.raiMediaFilteredReasons || [];
+        const reasonText = reasons.join(' ');
+        throw new Error(`Content filtered by safety systems: ${reasonText}`);
+      }
+
+      throw new Error('No videos were generated. The operation completed but returned no videos.');
     }
 
     const firstVideo = videos[0];
@@ -211,7 +225,7 @@ export const generateVideo = async (
 export const generateText = async (
   params: GenerateTextParams,
 ): Promise<string> => {
-  const modelName = params.model ?? 'gemini-2.0-flash-exp';
+  const modelName = params.model ?? 'gemini-2.0-flash';
   console.log(`Starting text generation with ${modelName}`);
 
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;

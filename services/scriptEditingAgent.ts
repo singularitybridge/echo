@@ -173,7 +173,7 @@ Return ONLY the complete modified story as JSON, with no markdown code blocks or
       prompt,
       temperature: 0.2, // Very low temperature for precise edits
       maxTokens: 3000,
-      model: 'gemini-2.0-flash-thinking-exp-01-21', // Use thinking model for complex reasoning
+      model: 'gemini-2.0-flash', // Use stable Gemini 2.0 Flash
       responseSchema: storyDraftSchema, // Enforce valid JSON structure
     });
 

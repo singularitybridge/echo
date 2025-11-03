@@ -271,19 +271,23 @@ export class AssetLoader {
         return { synced: 0, skipped: 0 };
       }
 
-      // Check which refs are already in database by checking tags
-      const hasStoryStorageTag = existingAssets.some(a => a.tags.includes('story-storage'));
-      if (hasStoryStorageTag) {
-        // Already synced, skip all
-        return { synced: 0, skipped: storyRefs.length };
-      }
-
+      // Check which specific refs are already synced by matching filenames in descriptions
       for (let i = 0; i < storyRefs.length; i++) {
         const ref = storyRefs[i];
 
         try {
           // Extract filename from asset path
           const filename = ref.objectUrl.split('/').pop() || '';
+
+          // Check if this specific file is already synced
+          const alreadySynced = existingAssets.some(
+            a => a.tags.includes('story-storage') && a.description.includes(filename)
+          );
+
+          if (alreadySynced) {
+            skipped++;
+            continue;
+          }
 
           // Create asset entry for story storage ref
           // Use imageUrl to download and save the image

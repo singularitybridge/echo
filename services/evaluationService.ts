@@ -215,13 +215,40 @@ Respond in JSON format:
   const result = await response.json();
   const text = result.candidates[0].content.parts[0].text;
 
-  // Extract JSON from response
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Failed to parse evaluation response');
+  // Extract JSON from response (looking for code blocks or raw JSON)
+  let jsonText = '';
+
+  // Try to find JSON in code blocks first
+  const codeBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    jsonText = codeBlockMatch[1];
+  } else {
+    // Fall back to finding any JSON object
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('Failed to extract JSON from Gemini response:', text);
+      throw new Error('Failed to parse evaluation response - no JSON found');
+    }
+    jsonText = jsonMatch[0];
   }
 
-  const evaluation = JSON.parse(jsonMatch[0]);
+  // Clean up common JSON issues
+  jsonText = jsonText
+    .replace(/[\u0000-\u001F]+/g, ' ') // Remove control characters
+    .replace(/\n/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim();
+
+  let evaluation;
+  try {
+    evaluation = JSON.parse(jsonText);
+  } catch (parseError) {
+    console.error('JSON parsing error:', parseError);
+    console.error('Attempted to parse:', jsonText);
+    console.error('Original response:', text);
+    throw new Error(`Failed to parse evaluation response: ${parseError.message}`);
+  }
+
   return {
     matches: evaluation.matches,
     analysis: evaluation.analysis,
@@ -287,13 +314,40 @@ Respond in JSON format:
   const result = await response.json();
   const text = result.candidates[0].content.parts[0].text;
 
-  // Extract JSON from response
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Failed to parse comparison response');
+  // Extract JSON from response (looking for code blocks or raw JSON)
+  let jsonText = '';
+
+  // Try to find JSON in code blocks first
+  const codeBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    jsonText = codeBlockMatch[1];
+  } else {
+    // Fall back to finding any JSON object
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('Failed to extract JSON from Gemini response:', text);
+      throw new Error('Failed to parse comparison response - no JSON found');
+    }
+    jsonText = jsonMatch[0];
   }
 
-  const comparison = JSON.parse(jsonMatch[0]);
+  // Clean up common JSON issues
+  jsonText = jsonText
+    .replace(/[\u0000-\u001F]+/g, ' ') // Remove control characters
+    .replace(/\n/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim();
+
+  let comparison;
+  try {
+    comparison = JSON.parse(jsonText);
+  } catch (parseError) {
+    console.error('JSON parsing error:', parseError);
+    console.error('Attempted to parse:', jsonText);
+    console.error('Original response:', text);
+    throw new Error(`Failed to parse comparison response: ${parseError.message}`);
+  }
+
   return {
     matches: comparison.matches,
     analysis: comparison.analysis,
