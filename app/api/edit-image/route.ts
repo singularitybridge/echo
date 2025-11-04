@@ -97,8 +97,27 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error in edit-image API:', error);
+
+    // Extract detailed error message from FAL API errors
+    let errorMessage = 'Internal server error';
+    let errorDetails = String(error);
+
+    // Check if it's a FAL API error with body
+    if (error && typeof error === 'object' && 'body' in error) {
+      const body = (error as any).body;
+      if (body && typeof body === 'object') {
+        // FAL errors often have a 'detail' field
+        if (body.detail) {
+          errorMessage = body.detail;
+        } else if (body.message) {
+          errorMessage = body.message;
+        }
+        errorDetails = JSON.stringify(body);
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Internal server error', details: String(error) },
+      { error: errorMessage, details: errorDetails },
       { status: 500 }
     );
   }

@@ -354,7 +354,17 @@ export default function EditAssetModal({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to edit asset');
+        // Extract detailed error message from API response
+        let errorMessage = 'Failed to edit asset';
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // If JSON parsing fails, use default message
+        }
+        throw new Error(errorMessage);
       }
 
       const newAsset: Asset = await response.json();
@@ -373,10 +383,10 @@ export default function EditAssetModal({
     } catch (error) {
       console.error('Failed to edit asset:', error);
 
-      // Add error message
+      // Add error message with actual error details
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Failed to edit asset. Please try again.',
+        content: error instanceof Error ? error.message : 'Failed to edit asset. Please try again.',
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
