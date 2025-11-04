@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Film, Video as VideoIcon, Package, Plus, User } from 'lucide-react';
+import { Film, Video as VideoIcon, Package, Plus, User, Bot } from 'lucide-react';
 import { Project } from '../types/project';
 import { StoryDraft } from '../types/story-creation';
 import { Asset } from '../types/asset';
@@ -285,14 +285,24 @@ const ProjectList: React.FC = () => {
               />
               <p className="text-sm text-gray-600">Your story, elevated</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all hover:scale-105 cursor-pointer"
-              title="Create New Story"
-              aria-label="Create New Story"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push('/agents')}
+                className="p-2.5 bg-gray-600 text-white rounded-full hover:bg-gray-700 transition-all hover:scale-105 cursor-pointer"
+                title="AI Agents"
+                aria-label="AI Agents"
+              >
+                <Bot className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all hover:scale-105 cursor-pointer"
+                title="Create New Story"
+                aria-label="Create New Story"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
