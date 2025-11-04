@@ -58,6 +58,8 @@ export default function AssetGenerationChatModal({
   const [currentAssetIndex, setCurrentAssetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -281,6 +283,16 @@ export default function AssetGenerationChatModal({
               <p className="text-sm text-gray-500">Chat with AI to create and refine visual assets</p>
             </div>
           </div>
+
+          {/* Success Banner */}
+          {showSuccessBanner && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+                <Check className="w-5 h-5" strokeWidth={3} />
+                <span className="font-medium">{successMessage}</span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {generatedAssets.length > 0 && (
               <button
@@ -344,10 +356,10 @@ export default function AssetGenerationChatModal({
                             className="w-full h-full object-cover"
                           />
 
-                          {/* Selection Indicator */}
+                          {/* Saved Indicator - Prominent Green Checkmark */}
                           {asset.selected && (
-                            <div className="absolute top-1 right-1 bg-primary rounded-full p-0.5">
-                              <Check className="w-2.5 h-2.5 text-primary-foreground" />
+                            <div className="absolute top-1 right-1 bg-green-500 rounded-full p-1 shadow-lg ring-2 ring-white">
+                              <Check className="w-3 h-3 text-white" strokeWidth={3} />
                             </div>
                           )}
 
@@ -417,10 +429,15 @@ export default function AssetGenerationChatModal({
                               // Mark as selected
                               toggleSelection(currentAsset.id);
 
+                              // Show success banner
+                              setSuccessMessage(`✓ Saved variation ${currentAssetIndex + 1} to your asset gallery!`);
+                              setShowSuccessBanner(true);
+                              setTimeout(() => setShowSuccessBanner(false), 3000);
+
                               // Add chat message notification
                               setMessages(prev => [...prev, {
                                 role: 'assistant',
-                                content: `✓ Saved "${currentAsset.metadata.type}" to your asset gallery!`,
+                                content: `✓ Saved "${currentAsset.metadata.type}" (variation ${currentAssetIndex + 1}) to your asset gallery!`,
                                 timestamp: Date.now(),
                               }]);
 
@@ -440,17 +457,19 @@ export default function AssetGenerationChatModal({
                             }
                           }}
                           disabled={isSaving || currentAsset.selected}
-                          className={`p-2 rounded-lg shadow-lg transition-colors backdrop-blur-sm ${
+                          className={`p-2 rounded-lg shadow-lg transition-all duration-300 backdrop-blur-sm ${
                             currentAsset.selected
-                              ? 'bg-indigo-600 hover:bg-indigo-700 cursor-default'
-                              : 'bg-white/90 hover:bg-white'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={currentAsset.selected ? "Already saved to gallery" : "Save to gallery"}
+                              ? 'bg-green-500 hover:bg-green-600 cursor-default scale-110'
+                              : isSaving
+                              ? 'bg-indigo-500'
+                              : 'bg-white/90 hover:bg-white hover:scale-105'
+                          } disabled:cursor-not-allowed`}
+                          title={currentAsset.selected ? "✓ Saved to gallery" : "Save to gallery"}
                         >
                           {isSaving ? (
                             <Loader2 className="w-4 h-4 animate-spin text-white" />
                           ) : currentAsset.selected ? (
-                            <Check className="w-4 h-4 text-white" />
+                            <Check className="w-4 h-4 text-white" strokeWidth={3} />
                           ) : (
                             <Check className="w-4 h-4 text-gray-700" />
                           )}
