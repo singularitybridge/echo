@@ -115,10 +115,28 @@ export const editScript = async (
 ): Promise<StoryDraft> => {
   console.log('[Script Editing Agent] Processing request:', userFeedback);
 
-  // Safely stringify the story, cleaning up any malformed JSON in voiceovers
+  // Strip out large data fields to reduce token count
+  // Only include fields needed for script editing
+  const sanitizedStory = {
+    projectMetadata: existingStory.projectMetadata,
+    scenes: existingStory.scenes.map(scene => ({
+      id: scene.id,
+      title: scene.title,
+      duration: scene.duration,
+      prompt: scene.prompt,
+      cameraAngle: scene.cameraAngle,
+      voiceover: scene.voiceover,
+      generated: scene.generated,
+      settings: scene.settings,
+      // Exclude: videoUrl, evaluation, lastFrameDataUrl, assets - not needed for editing
+    })),
+  };
+
+  // Safely stringify the sanitized story
   let storyJson: string;
   try {
-    storyJson = JSON.stringify(existingStory, null, 2);
+    storyJson = JSON.stringify(sanitizedStory, null, 2);
+    console.log('[Script Editing Agent] Story JSON size:', storyJson.length, 'characters');
   } catch (error) {
     console.error('[Script Editing Agent] Error stringifying input story:', error);
     throw new Error('Invalid story format - unable to serialize story data');
@@ -194,12 +212,32 @@ Return ONLY the complete modified story as JSON, with no markdown code blocks or
       }
     }
 
+    // Merge back the stripped data (videoUrl, evaluation, etc.) from original scenes
+    // This preserves data that wasn't sent to the agent
+    const mergedScenes = refinedStory.scenes.map(refinedScene => {
+      const originalScene = existingStory.scenes.find(s => s.id === refinedScene.id);
+      if (originalScene) {
+        // Scene was modified - merge with original data
+        return {
+          ...refinedScene,
+          videoUrl: originalScene.videoUrl, // Preserve video URL
+          evaluation: originalScene.evaluation, // Preserve evaluation
+          lastFrameDataUrl: originalScene.lastFrameDataUrl, // Preserve last frame
+        };
+      }
+      // New scene - return as is
+      return refinedScene;
+    });
+
     console.log('[Script Editing Agent] Edit complete:', {
       scenesCount: refinedStory.scenes.length,
       title: refinedStory.projectMetadata.title,
     });
 
-    return refinedStory;
+    return {
+      ...refinedStory,
+      scenes: mergedScenes,
+    };
   } catch (error) {
     console.error('[Script Editing Agent] Error:', error);
     throw new Error(
