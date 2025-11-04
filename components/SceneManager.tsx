@@ -202,6 +202,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             createdAt: story.metadata.createdAt,
             updatedAt: story.metadata.updatedAt,
             tags: story.metadata.tags || [],
+            generationMetadata: story.metadata.generationMetadata,
           };
 
           setProject(projectData);
@@ -1751,6 +1752,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           aspectRatio={project.aspectRatio ?? AspectRatio.PORTRAIT}
           defaultModel={project.defaultModel ?? VeoModel.VEO}
           defaultResolution={project.defaultResolution ?? Resolution.P720}
+          generationMetadata={project.generationMetadata}
           onSave={async (settings) => {
             try {
               // Update metadata (title, description)

@@ -14,6 +14,11 @@ interface ProjectSettingsModalProps {
   aspectRatio: AspectRatio;
   defaultModel: VeoModel;
   defaultResolution: Resolution;
+  generationMetadata?: {
+    mode: 'quick' | 'custom';
+    timestamp: string;
+    originalParams: Record<string, any>;
+  };
   onSave: (settings: {
     title: string;
     description: string;
@@ -31,6 +36,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   aspectRatio,
   defaultModel,
   defaultResolution,
+  generationMetadata,
   onSave,
 }) => {
   const [title, setTitle] = useState(projectName);
@@ -118,6 +124,90 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Creation Parameters Section */}
+          {generationMetadata && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Creation Parameters</h3>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">Creation Mode</span>
+                  <span className="text-sm font-semibold text-gray-900 capitalize">
+                    {generationMetadata.mode === 'quick' ? 'Quick Start' : 'Custom Story'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">Created At</span>
+                  <span className="text-sm text-gray-900">
+                    {new Date(generationMetadata.timestamp).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="border-t border-gray-200 pt-3">
+                  <div className="text-sm font-medium text-gray-600 mb-2">Parameters</div>
+                  <div className="space-y-2">
+                    {generationMetadata.mode === 'quick' ? (
+                      <>
+                        {generationMetadata.originalParams.genre && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Genre</span>
+                            <span className="text-xs font-medium text-gray-700 capitalize">
+                              {generationMetadata.originalParams.genre}
+                            </span>
+                          </div>
+                        )}
+                        {generationMetadata.originalParams.type && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Story Type</span>
+                            <span className="text-xs font-medium text-gray-700 capitalize">
+                              {generationMetadata.originalParams.type.replace('-', ' ')}
+                            </span>
+                          </div>
+                        )}
+                        {generationMetadata.originalParams.energy && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Energy</span>
+                            <span className="text-xs font-medium text-gray-700 capitalize">
+                              {generationMetadata.originalParams.energy}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {generationMetadata.originalParams.concept && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">Concept</div>
+                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                              {generationMetadata.originalParams.concept}
+                            </div>
+                          </div>
+                        )}
+                        {generationMetadata.originalParams.character && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">Character</div>
+                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                              {generationMetadata.originalParams.character}
+                            </div>
+                          </div>
+                        )}
+                        {generationMetadata.originalParams.mood && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">Mood</div>
+                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                              {generationMetadata.originalParams.mood}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Video Settings Section */}
           <div>

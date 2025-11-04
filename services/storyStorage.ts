@@ -32,6 +32,11 @@ export interface StoryMetadata {
   tags: string[];
   author?: string;
   status: 'draft' | 'in-progress' | 'completed' | 'published';
+  generationMetadata?: {
+    mode: 'quick' | 'custom';
+    timestamp: string;
+    originalParams: Record<string, any>; // QuickPathParams | CustomPathParams
+  };
 }
 
 export interface StoryScript {
@@ -69,6 +74,11 @@ export interface CreateStoryRequest {
   script: StoryScript;
   config: StoryConfig;
   tags?: string[];
+  generationMetadata?: {
+    mode: 'quick' | 'custom';
+    timestamp: string;
+    originalParams: Record<string, any>;
+  };
 }
 
 export interface StoryFilters {
@@ -202,6 +212,7 @@ class StoryStorage {
       version: 1,
       tags: data.tags || [],
       status: 'draft',
+      generationMetadata: data.generationMetadata,
     };
 
     // Save files

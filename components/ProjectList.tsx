@@ -169,6 +169,7 @@ const ProjectList: React.FC = () => {
           characterReferences: [],
         },
         tags: currentStoryDraft.projectMetadata.tags || [],
+        generationMetadata: currentStoryDraft.generationMetadata,
       };
 
       const storyResponse = await fetch('/api/stories', {
