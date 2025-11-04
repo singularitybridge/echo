@@ -20,6 +20,13 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
   const [imageLoaded, setImageLoaded] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
 
+  // Add cache-busting parameter using updatedAt timestamp
+  const getCacheBustedUrl = (url: string) => {
+    if (!url || url.startsWith('/placeholder')) return url;
+    const timestamp = new Date(asset.updatedAt).getTime();
+    return `${url}?t=${timestamp}`;
+  };
+
   const getTypeColor = (type: string): string => {
     switch (type) {
       case 'character':
@@ -60,7 +67,7 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
           </div>
         )}
         <img
-          src={asset.url || '/placeholder-asset.png'}
+          src={getCacheBustedUrl(asset.url || '/placeholder-asset.png')}
           alt={asset.name}
           className={`w-full h-full object-cover ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
@@ -75,7 +82,7 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
         {/* Overlay with actions (shown on hover) */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
           <button
-            onClick={() => window.open(asset.url, '_blank')}
+            onClick={() => window.open(getCacheBustedUrl(asset.url), '_blank')}
             className="flex items-center justify-center w-10 h-10 bg-white rounded-full text-gray-700 hover:bg-gray-100 transition-colors"
             title="View full size"
           >

@@ -14,6 +14,7 @@ import {
   ChevronsRight,
   Sparkles,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 import type { Asset } from '@/types/asset';
 
@@ -42,6 +43,7 @@ export default function EditAssetModal({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -122,13 +124,6 @@ export default function EditAssetModal({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl+Enter to send message
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        handleSendMessage();
-        return;
-      }
-
       // Esc to close
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -180,6 +175,7 @@ export default function EditAssetModal({
       setMessages([]);
       setChatInput('');
       setIsGenerating(false);
+      setIsRegenerating(false);
     }
   }, [isOpen]);
 
@@ -258,6 +254,78 @@ export default function EditAssetModal({
       alert('Failed to save as new asset. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (isGenerating || isRegenerating) return;
+
+    const currentAsset = versionHistory[currentVersionIndex];
+
+    // Can only regenerate edited versions (not the original)
+    if (currentAsset.version === 1 || currentAsset.editHistory.length === 0) {
+      return;
+    }
+
+    // Get the last edit prompt used for this version
+    const lastEdit = currentAsset.editHistory[currentAsset.editHistory.length - 1];
+    const editPrompt = lastEdit.editPrompt;
+
+    setIsRegenerating(true);
+
+    // Add regeneration message to chat
+    const regenerateMessage: ChatMessage = {
+      role: 'assistant',
+      content: `Regenerating with: "${editPrompt}"`,
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, regenerateMessage]);
+
+    try {
+      // Use the parent version for regeneration (one version before current)
+      const parentAsset = versionHistory[currentVersionIndex - 1];
+
+      const response = await fetch(`/api/assets/${parentAsset.id}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ editPrompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to regenerate asset');
+      }
+
+      const newAsset: Asset = await response.json();
+
+      // Add success message
+      const successMessage: ChatMessage = {
+        role: 'assistant',
+        content: `New variation created successfully. This is an alternative version based on the same prompt.`,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, successMessage]);
+
+      // Update version history - add new variation after current
+      setVersionHistory((prev) => {
+        const updated = [...prev];
+        updated.splice(currentVersionIndex + 1, 0, newAsset);
+        return updated;
+      });
+
+      // Move to the new variation
+      setCurrentVersionIndex(currentVersionIndex + 1);
+    } catch (error) {
+      console.error('Failed to regenerate asset:', error);
+
+      // Add error message
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Failed to regenerate. Please try again.',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -345,7 +413,7 @@ export default function EditAssetModal({
           <div className="flex items-center gap-2">
             <button
               onClick={handleSaveAsNew}
-              disabled={isGenerating || isSaving || currentVersionIndex === 0}
+              disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -353,7 +421,7 @@ export default function EditAssetModal({
             </button>
             <button
               onClick={handleSave}
-              disabled={isGenerating || isSaving || currentVersionIndex === 0}
+              disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -362,72 +430,65 @@ export default function EditAssetModal({
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              disabled={isGenerating || isSaving}
+              disabled={isGenerating || isRegenerating || isSaving}
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
         </div>
 
-        {/* Main Content: Two-column layout */}
+        {/* Main Content: Three-column layout */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Column: Image Preview (60%) */}
-          <div className="w-[60%] flex flex-col bg-gray-50 border-r border-gray-200">
-            {/* Version Navigation */}
-            <div className="p-4 bg-white border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setCurrentVersionIndex(0)}
-                    disabled={!canNavigateLeft || isLoadingLineage}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="First version (Home)"
-                  >
-                    <Home className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => navigateVersion(-1)}
-                    disabled={!canNavigateLeft || isLoadingLineage}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Previous version (← or ↑)"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => navigateVersion(1)}
-                    disabled={!canNavigateRight || isLoadingLineage}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Next version (→ or ↓)"
-                  >
-                    <ChevronRight className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentVersionIndex(versionHistory.length - 1)}
-                    disabled={!canNavigateRight || isLoadingLineage}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Latest version (End)"
-                  >
-                    <ChevronsRight className="w-4 h-4 text-gray-600" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    Version {currentVersionIndex + 1} of {versionHistory.length}
-                  </span>
-                  {currentVersionIndex === 0 && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                      Original
-                    </span>
-                  )}
-                  {!isAtLatestVersion && (
-                    <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full">
-                      Viewing Past
-                    </span>
-                  )}
-                </div>
-              </div>
+          {/* Left Column: Version List (15%) */}
+          <div className="w-[15%] flex flex-col bg-white border-r border-gray-200">
+            <div className="p-3 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-xs font-semibold text-gray-600 uppercase">Versions</h3>
             </div>
+            <div className="flex-1 overflow-y-auto">
+              {isLoadingLineage ? (
+                <div className="flex items-center justify-center p-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {versionHistory.map((version, index) => (
+                    <button
+                      key={version.id}
+                      onClick={() => setCurrentVersionIndex(index)}
+                      disabled={isGenerating || isRegenerating}
+                      className={`w-full text-left p-2 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                        index === currentVersionIndex
+                          ? 'bg-purple-100 border-2 border-purple-500'
+                          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          index === currentVersionIndex ? 'bg-purple-600' : 'bg-gray-300'
+                        }`} />
+                        <span className={`text-xs font-medium ${
+                          index === currentVersionIndex ? 'text-purple-900' : 'text-gray-700'
+                        }`}>
+                          v{version.version}
+                        </span>
+                      </div>
+                      {index === 0 && (
+                        <span className="text-xs text-gray-500 mt-1 block ml-3.5">Original</span>
+                      )}
+                      {version.editHistory.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2 ml-3.5">
+                          {version.editHistory[version.editHistory.length - 1].editPrompt}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Middle Column: Image Preview (50%) */}
+          <div className="w-[50%] flex flex-col bg-gray-50 border-r border-gray-200">
 
             {/* Image Display */}
             <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
@@ -457,13 +518,31 @@ export default function EditAssetModal({
                       </div>
                     )}
                   </div>
+
+                  {/* Regenerate Button - only for edited versions */}
+                  {currentAsset.version > 1 && currentAsset.editHistory.length > 0 && (
+                    <div className="absolute top-3 right-3">
+                      <button
+                        onClick={handleRegenerate}
+                        disabled={isGenerating || isRegenerating || isLoadingLineage || isSaving}
+                        className="p-2 bg-white bg-opacity-90 hover:bg-opacity-100 text-purple-600 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                        title="Generate another variation with the same prompt"
+                      >
+                        {isRegenerating ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>
           </div>
 
-          {/* Right Column: Chat Interface (40%) */}
-          <div className="w-[40%] flex flex-col bg-white">
+          {/* Right Column: Chat Interface (35%) */}
+          <div className="w-[35%] flex flex-col bg-white">
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message, index) => (
@@ -501,6 +580,17 @@ export default function EditAssetModal({
                 </div>
               )}
 
+              {isRegenerating && (
+                <div className="flex justify-start">
+                  <div className="bg-purple-100 text-purple-900 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <p className="text-sm">Regenerating variation...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div ref={chatEndRef} />
             </div>
 
@@ -520,20 +610,20 @@ export default function EditAssetModal({
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSendMessage();
                     }
                   }}
-                  disabled={isGenerating || isLoadingLineage}
-                  placeholder="Describe your edit (Cmd+Enter to send)..."
+                  disabled={isGenerating || isRegenerating || isLoadingLineage}
+                  placeholder="Describe your edit (Enter to send, Shift+Enter for new line)..."
                   rows={1}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm min-h-[40px] max-h-[120px] overflow-y-auto"
                   style={{ height: 'auto' }}
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!chatInput.trim() || isGenerating || isLoadingLineage}
+                  disabled={!chatInput.trim() || isGenerating || isRegenerating || isLoadingLineage}
                   className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   title="Send message (Cmd+Enter)"
                 >
@@ -547,10 +637,11 @@ export default function EditAssetModal({
 
               <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                 <div className="flex items-center gap-4">
-                  <span>← → ↑ ↓ Navigate versions</span>
+                  <span>← → ↑ ↓ Navigate</span>
                   <span>/ Focus input</span>
+                  <span>Esc Close</span>
                 </div>
-                <span>Cmd+Enter Send</span>
+                <span>Enter Send</span>
               </div>
             </div>
           </div>
