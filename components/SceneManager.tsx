@@ -1459,7 +1459,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
                           {/* Edit button overlay - only show for asset references */}
                           {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 // Find the asset from AssetLoader
@@ -1483,11 +1485,18 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                                   })
                                   .catch(err => console.error('Failed to load asset:', err));
                               }}
-                              className="absolute top-1 right-1 p-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  e.currentTarget.click();
+                                }
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer"
                               title="Edit this asset"
                             >
                               <Edit2 className="w-3 h-3 text-indigo-600" />
-                            </button>
+                            </div>
                           )}
                         </div>
 

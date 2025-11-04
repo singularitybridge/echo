@@ -17,9 +17,10 @@ import { storyStorage } from '../../../../../services/storyStorage';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
 
     if (!body.scenes || !Array.isArray(body.scenes)) {
@@ -29,18 +30,19 @@ export async function PUT(
       );
     }
 
-    const changesSummary = await storyStorage.updateScript(params.id, {
+    const changesSummary = await storyStorage.updateScript(id, {
       scenes: body.scenes,
     });
 
     return NextResponse.json({
       success: true,
-      storyId: params.id,
+      storyId: id,
       updatedAt: new Date().toISOString(),
       changesSummary,
     });
   } catch (error) {
-    console.error(`Error updating script for story ${params.id}:`, error);
+    const { id } = await params;
+    console.error(`Error updating script for story ${id}:`, error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to update script' },
       { status: 500 }
