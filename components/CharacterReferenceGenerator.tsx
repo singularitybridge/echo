@@ -15,6 +15,9 @@ interface CharacterReferenceGeneratorProps {
 
 type AspectRatio = '16:9' | '9:16';
 
+// Global lock to prevent double-generation from React Strict Mode
+let generationLock = false;
+
 const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = ({ projectId }) => {
   const router = useRouter();
   const [characterDescription, setCharacterDescription] = useState('');
@@ -26,16 +29,22 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [justGenerated, setJustGenerated] = useState(false);
+  const hasGeneratedInSession = React.useRef(false);
+  const isGeneratingRef = React.useRef(false);
+
+  // Reset generation flag when aspect ratio changes (so user can see existing images)
+  React.useEffect(() => {
+    hasGeneratedInSession.current = false;
+    setJustGenerated(false);
+  }, [aspectRatio]);
 
   // Load existing images from public/generated-refs/{projectId} based on aspect ratio
   React.useEffect(() => {
+    // Skip loading if we have generated images in this session
+    if (hasGeneratedInSession.current) return;
+
     // Skip loading if we just generated images in this session
     if (justGenerated) return;
-
-    // Skip loading if we already have images with blob URLs (freshly generated)
-    if (generatedImages.length > 0 && generatedImages.every(img => img.objectUrl.startsWith('blob:'))) {
-      return;
-    }
 
     const loadExistingImages = async () => {
       const existingImages: GeneratedImage[] = [];
@@ -76,13 +85,11 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
 
       if (existingImages.length > 0) {
         setGeneratedImages(existingImages);
-      } else {
-        setGeneratedImages([]);
       }
     };
 
     loadExistingImages();
-  }, [projectId, aspectRatio, justGenerated, generatedImages]);
+  }, [projectId, aspectRatio, justGenerated]);
 
   // Keyboard navigation for modal
   React.useEffect(() => {
@@ -102,12 +109,21 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedImageIndex, generatedImages.length]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = React.useCallback(async () => {
     if (!characterDescription.trim()) {
       setError('Please enter a character description');
       return;
     }
 
+    // Prevent double-invocation (React Strict Mode in dev) using global lock
+    if (generationLock || isGeneratingRef.current || isGenerating) {
+      console.log('Generation already in progress, skipping duplicate call');
+      return;
+    }
+
+    console.log('Starting generation, setting all locks');
+    generationLock = true;
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     setError(null);
     setGeneratedImages([]);
@@ -120,11 +136,19 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
       );
       setGeneratedImages(images);
       setJustGenerated(true);
+      hasGeneratedInSession.current = true;
 
       // Auto-save generated images
       await saveReferences(images);
     } catch (err) {
       console.error('Character reference generation failed:', err);
+
+      // If it's a duplicate generation error, silently ignore it
+      if (err instanceof Error && err.message === 'Generation already in progress') {
+        console.log('[CharacterReferenceGenerator] Duplicate generation caught and ignored');
+        return;
+      }
+
       setError(
         err instanceof Error
           ? err.message
@@ -132,8 +156,11 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
       );
     } finally {
       setIsGenerating(false);
+      isGeneratingRef.current = false;
+      generationLock = false;
+      console.log('Generation complete, releasing all locks');
     }
-  };
+  }, [characterDescription, numberOfImages, aspectRatio, isGenerating]);
 
   const saveReferences = async (images: GeneratedImage[]) => {
     setIsSaving(true);
@@ -178,7 +205,12 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
       <div className="mb-8">
         <button
           onClick={() => router.push(`/projects/${projectId}`)}
-          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-4"
+          disabled={isGenerating}
+          className={`flex items-center gap-2 transition-colors mb-4 ${
+            isGenerating
+              ? 'text-gray-600 cursor-not-allowed'
+              : 'text-gray-400 hover:text-white'
+          }`}
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Project
@@ -269,7 +301,11 @@ const CharacterReferenceGenerator: React.FC<CharacterReferenceGeneratorProps> = 
         </div>
 
         <button
-          onClick={handleGenerate}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleGenerate();
+          }}
           disabled={isGenerating || !characterDescription.trim()}
           className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         >

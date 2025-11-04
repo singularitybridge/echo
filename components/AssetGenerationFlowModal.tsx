@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Minimize2,
 } from 'lucide-react';
 import type { StoryDraft } from '../types/story-creation';
 import type { Asset, AssetType, AssetProvider } from '../types/asset';
@@ -28,11 +29,13 @@ import {
 interface AssetGenerationFlowModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onBack?: () => void; // Optional callback to go back to story editing
+  onMinimize?: () => void; // Optional callback to minimize while generation continues
   storyDraft: StoryDraft;
   onComplete: (assets: Asset[]) => void;
 }
 
-type FlowStep = 'design' | 'pose' | 'confirmation';
+type FlowStep = 'design' | 'pose';
 type CharacterModel = 'fal-instant-character' | 'flux-context-pro' | 'gemini-nano-banana' | 'gemini-flash';
 
 interface DesignOption {
@@ -56,6 +59,8 @@ interface PoseOption {
 export default function AssetGenerationFlowModal({
   isOpen,
   onClose,
+  onBack,
+  onMinimize,
   storyDraft,
   onComplete,
 }: AssetGenerationFlowModalProps) {
@@ -564,22 +569,32 @@ export default function AssetGenerationFlowModal({
               <h2 className="text-xl font-semibold text-gray-900">
                 {step === 'design' && 'Character Design'}
                 {step === 'pose' && 'Poses & Outfits'}
-                {step === 'confirmation' && 'Confirm Selection'}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
                 {step === 'design' && 'Select your character design style'}
                 {step === 'pose' && 'Choose poses for different scenes'}
-                {step === 'confirmation' && 'Review and save your assets'}
               </p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            disabled={saving}
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Minimize button - only show during generation */}
+            {(generatingDesigns || generatingPoses) && onMinimize && (
+              <button
+                onClick={onMinimize}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                title="Continue generation in background"
+              >
+                <Minimize2 className="w-5 h-5" />
+              </button>
+            )}
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              disabled={saving}
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -819,73 +834,20 @@ export default function AssetGenerationFlowModal({
             </div>
           )}
 
-          {/* Step 3: Confirmation */}
-          {step === 'confirmation' && (
-            <div>
-              <div className="space-y-6">
-                {/* Selected Design */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Selected Character Design
-                  </h3>
-                  <div className="max-w-xs">
-                    {designOptions
-                      .filter(d => d.id === selectedDesign)
-                      .map(design => (
-                        <div key={design.id} className="rounded-xl overflow-hidden border-2 border-indigo-600">
-                          <div className="aspect-[9/16]">
-                            <img
-                              src={design.imageUrl}
-                              alt={`Design ${design.label}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="p-3 bg-indigo-50">
-                            <p className="font-medium text-gray-900">Design {design.label}</p>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Selected Poses */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Selected Poses ({selectedPoses.size})
-                  </h3>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    {poseOptions
-                      .filter(p => selectedPoses.has(p.id))
-                      .map(pose => (
-                        <div key={pose.id} className="rounded-xl overflow-hidden border-2 border-gray-200">
-                          <div className="aspect-[9/16]">
-                            <img
-                              src={pose.imageUrl}
-                              alt={pose.emotion}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="p-3 bg-white">
-                            <p className="font-medium text-gray-900 capitalize">{pose.emotion}</p>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <button
             onClick={() => {
-              if (step === 'pose') setStep('design');
-              else if (step === 'confirmation') setStep('pose');
+              if (step === 'design' && onBack) {
+                onBack();
+              } else if (step === 'pose') {
+                setStep('design');
+              }
             }}
             className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={step === 'design' || saving}
+            disabled={(step === 'design' && !onBack) || saving}
           >
             <ChevronLeft className="w-4 h-4" />
             Back
@@ -913,19 +875,8 @@ export default function AssetGenerationFlowModal({
 
             {step === 'pose' && (
               <button
-                onClick={() => setStep('confirmation')}
-                disabled={selectedPoses.size === 0 || generatingPoses}
-                className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-
-            {step === 'confirmation' && (
-              <button
                 onClick={handleSaveAssets}
-                disabled={saving}
+                disabled={selectedPoses.size === 0 || generatingPoses || saving}
                 className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {saving ? (

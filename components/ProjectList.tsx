@@ -19,6 +19,7 @@ const ProjectList: React.FC = () => {
   const [showAssetGenerationModal, setShowAssetGenerationModal] = useState(false);
   const [currentStoryDraft, setCurrentStoryDraft] = useState<StoryDraft | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isGeneratingInBackground, setIsGeneratingInBackground] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -122,6 +123,23 @@ const ProjectList: React.FC = () => {
     setShowAssetGenerationModal(true);
   };
 
+  const handleBackToStoryEdit = () => {
+    setShowAssetGenerationModal(false);
+    setShowCreateModal(true);
+    // currentStoryDraft is preserved so user can continue editing
+  };
+
+  const handleMinimizeAssetGeneration = () => {
+    setShowAssetGenerationModal(false);
+    setIsGeneratingInBackground(true);
+    // currentStoryDraft is preserved so generation can complete in background
+  };
+
+  const handleReopenAssetGeneration = () => {
+    setIsGeneratingInBackground(false);
+    setShowAssetGenerationModal(true);
+  };
+
   const handleAssetsGenerated = async (assets: Asset[]) => {
     if (!currentStoryDraft) {
       console.error('No story draft available');
@@ -129,6 +147,7 @@ const ProjectList: React.FC = () => {
     }
 
     setShowAssetGenerationModal(false);
+    setIsGeneratingInBackground(false);
     setIsCreatingProject(true);
 
     try {
@@ -292,16 +311,14 @@ const ProjectList: React.FC = () => {
                 {/* Thumbnail Section */}
                 <div className="relative w-full bg-gray-100">
                   {thumbnail ? (
-                    <div
-                      className="relative w-full aspect-[9/16] overflow-hidden"
-                    >
+                    <div className="relative w-full aspect-[9/16] overflow-hidden">
                       <img
                         src={thumbnail}
                         alt={project.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       {/* Gradient overlay for better text contrast */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
                       {/* Type badge overlay */}
                       <div className="absolute top-3 right-3">
@@ -314,21 +331,43 @@ const ProjectList: React.FC = () => {
                         </span>
                       </div>
 
-                      {/* Title overlay */}
+                      {/* Title, Description, and Stats overlay */}
                       <div className="absolute bottom-0 left-0 right-0 p-4">
-                        <h3 className="text-xl font-semibold text-white mb-1 drop-shadow-lg">
+                        <h3 className="text-xl font-semibold text-white mb-2 drop-shadow-lg">
                           {project.title}
                         </h3>
+                        <p className="text-white/90 text-sm mb-3 line-clamp-2 drop-shadow">
+                          {project.description}
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-white/80">
+                          <div className="flex items-center gap-1.5">
+                            <VideoIcon className="w-3.5 h-3.5" />
+                            <span>{project.scenes.length} scenes</span>
+                          </div>
+                          {project.character && (
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5" />
+                              <span className="truncate">
+                                {typeof project.character === 'string'
+                                  ? project.character
+                                  : project.character.name}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ) : (
                     // Fallback when no thumbnail exists
-                    <div className="relative w-full aspect-[9/16] bg-gray-100 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="p-4 bg-white rounded-xl mb-3 inline-block shadow-sm">
-                          {getProjectIcon(project.type)}
+                    <div className="relative w-full aspect-[9/16] bg-gray-100 flex flex-col">
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="p-4 bg-white rounded-xl mb-3 inline-block shadow-sm">
+                            {getProjectIcon(project.type)}
+                          </div>
                         </div>
                       </div>
+
                       {/* Type badge overlay */}
                       <div className="absolute top-3 right-3">
                         <span
@@ -339,41 +378,34 @@ const ProjectList: React.FC = () => {
                           {project.type}
                         </span>
                       </div>
-                    </div>
-                  )}
-                </div>
 
-                {/* Content Section */}
-                <div className="p-5">
-                  {/* Title (only show if no thumbnail) */}
-                  {!thumbnail && (
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-black transition-colors">
-                      {project.title}
-                    </h3>
-                  )}
-
-                  {/* Description */}
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                    {project.description}
-                  </p>
-
-                  {/* Stats */}
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <div className="flex items-center gap-1.5">
-                      <VideoIcon className="w-3.5 h-3.5" />
-                      <span>{project.scenes.length} scenes</span>
-                    </div>
-                    {project.character && (
-                      <div className="flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5" />
-                        <span className="truncate">
-                          {typeof project.character === 'string'
-                            ? project.character
-                            : project.character.name}
-                        </span>
+                      {/* Content overlay for cards without thumbnails */}
+                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-900/80 to-transparent">
+                        <h3 className="text-lg font-semibold text-white mb-2 drop-shadow">
+                          {project.title}
+                        </h3>
+                        <p className="text-white/90 text-sm mb-3 line-clamp-2">
+                          {project.description}
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-white/80">
+                          <div className="flex items-center gap-1.5">
+                            <VideoIcon className="w-3.5 h-3.5" />
+                            <span>{project.scenes.length} scenes</span>
+                          </div>
+                          {project.character && (
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5" />
+                              <span className="truncate">
+                                {typeof project.character === 'string'
+                                  ? project.character
+                                  : project.character.name}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -398,8 +430,15 @@ const ProjectList: React.FC = () => {
       {/* Story Creation Modal */}
       <CreateStoryModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => {
+          setShowCreateModal(false);
+          // Only clear draft when user explicitly closes without going to asset generation
+          if (!showAssetGenerationModal) {
+            setCurrentStoryDraft(null);
+          }
+        }}
         onStoryCreated={handleStoryCreated}
+        initialDraft={currentStoryDraft}
       />
 
       {/* Asset Generation Modal */}
@@ -409,7 +448,10 @@ const ProjectList: React.FC = () => {
           onClose={() => {
             setShowAssetGenerationModal(false);
             setCurrentStoryDraft(null);
+            setIsGeneratingInBackground(false);
           }}
+          onBack={handleBackToStoryEdit}
+          onMinimize={handleMinimizeAssetGeneration}
           storyDraft={currentStoryDraft}
           onComplete={handleAssetsGenerated}
         />
@@ -429,6 +471,30 @@ const ProjectList: React.FC = () => {
                   Setting up your story with generated assets...
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Background Generation Progress Notification */}
+      {isGeneratingInBackground && (
+        <div
+          onClick={handleReopenAssetGeneration}
+          className="fixed bottom-6 right-6 bg-white rounded-xl shadow-2xl p-4 max-w-sm cursor-pointer hover:shadow-3xl transition-all z-50 border border-gray-200 hover:border-indigo-300"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-indigo-200 border-t-indigo-600" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                Generating Assets
+              </h4>
+              <p className="text-xs text-gray-600">
+                Character designs are being created in the background. Click to view progress.
+              </p>
             </div>
           </div>
         </div>

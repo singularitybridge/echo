@@ -97,6 +97,11 @@ const CharacterRefsModal: React.FC<CharacterRefsModalProps> = ({
       return;
     }
 
+    if (isGenerating) {
+      console.log('[CharacterRefsModal] Generation already in progress, ignoring duplicate call');
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     setGeneratedImages([]);
@@ -111,6 +116,13 @@ const CharacterRefsModal: React.FC<CharacterRefsModalProps> = ({
       await saveReferences(images);
     } catch (err) {
       console.error('Character reference generation failed:', err);
+
+      // If it's a duplicate generation error, silently ignore it
+      if (err instanceof Error && err.message === 'Generation already in progress') {
+        console.log('[CharacterRefsModal] Duplicate generation caught and ignored');
+        return;
+      }
+
       setError(
         err instanceof Error
           ? err.message

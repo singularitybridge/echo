@@ -35,6 +35,7 @@ interface CreateStoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStoryCreated: (story: StoryDraft) => void;
+  initialDraft?: StoryDraft | null; // Optional initial draft to continue editing
 }
 
 type Step = 'choice' | 'quick' | 'custom' | 'character-method' | 'edit';
@@ -43,6 +44,7 @@ export default function CreateStoryModal({
   isOpen,
   onClose,
   onStoryCreated,
+  initialDraft,
 }: CreateStoryModalProps) {
   const [step, setStep] = useState<Step>('choice');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -74,6 +76,23 @@ export default function CreateStoryModal({
   const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; timestamp: number}>>([]);
   const [chatInput, setChatInput] = useState('');
   const [isRefining, setIsRefining] = useState(false);
+
+  // Handle initialDraft when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialDraft) {
+        // Restore the draft and go to edit step
+        setStoryDraft(initialDraft);
+        setStep('edit');
+        setGenerationMode('quick'); // Default, could enhance this later
+      } else {
+        // Fresh start - ensure clean state
+        setStep('choice');
+        setStoryDraft(null);
+        setMessages([]);
+      }
+    }
+  }, [isOpen, initialDraft]);
 
   // Edit story using simple POST request (no AI SDK streaming needed)
   const editStory = async (editRequest: string) => {
@@ -148,7 +167,12 @@ export default function CreateStoryModal({
         setStep('quick');
       }
     } else if (step === 'character-method') {
-      setStep('custom');
+      // Go back to the step based on how the user got here
+      if (generationMode === 'custom') {
+        setStep('custom');
+      } else {
+        setStep('quick');
+      }
     } else if (step === 'quick' || step === 'custom') {
       setStep('choice');
     } else {
@@ -260,7 +284,7 @@ export default function CreateStoryModal({
   const handleCreateProject = () => {
     if (!storyDraft) return;
     onStoryCreated(storyDraft);
-    handleClose();
+    // Don't call handleClose() - parent handles closing the modal
   };
 
   const handleClose = () => {
@@ -340,7 +364,7 @@ export default function CreateStoryModal({
             <div className="grid md:grid-cols-2 gap-6">
               {/* Quick Start Card */}
               <div
-                className="group relative bg-gradient-to-br from-indigo-50 to-white border-2 border-indigo-200 rounded-xl p-6 hover:shadow-xl transition-all cursor-pointer"
+                className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-indigo-300 transition-all cursor-pointer"
                 onClick={handleChooseQuick}
               >
                 <div className="flex flex-col h-full">
@@ -386,7 +410,7 @@ export default function CreateStoryModal({
 
               {/* Custom Story Card */}
               <div
-                className="group relative bg-gradient-to-br from-purple-50 to-white border-2 border-purple-200 rounded-xl p-6 hover:shadow-xl transition-all cursor-pointer"
+                className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-purple-300 transition-all cursor-pointer"
                 onClick={handleChooseCustom}
               >
                 <div className="flex flex-col h-full">
@@ -566,16 +590,55 @@ export default function CreateStoryModal({
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">
+                {/* Generate Character Card */}
+                <button
+                  onClick={() => {
+                    setCharacterMethod('generate');
+                  }}
+                  className={`group relative bg-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
+                    characterMethod === 'generate'
+                      ? 'border-purple-600'
+                      : 'border-gray-200 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex flex-col h-full">
+                    <div className="mb-4">
+                      <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                        <Wand2 className="w-8 h-8 text-purple-600" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">Generate with AI</h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Let AI create character references based on your description
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>AI-generated art</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Multiple variations</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <Check className="w-4 h-4 text-green-600" />
+                        <span>Perfect consistency</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
                 {/* Upload Character Card */}
                 <button
                   onClick={() => {
                     setCharacterMethod('upload');
                     setShowUploadModal(true);
                   }}
-                  className={`group relative bg-gradient-to-br from-blue-50 to-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
+                  className={`group relative bg-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
                     characterMethod === 'upload' && uploadedCharacterAssetId
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-blue-200 hover:border-blue-300'
+                      ? 'border-blue-600'
+                      : 'border-gray-200 hover:border-blue-300'
                   }`}
                 >
                   <div className="flex flex-col h-full">
@@ -612,45 +675,6 @@ export default function CreateStoryModal({
                         </div>
                       </div>
                     )}
-                  </div>
-                </button>
-
-                {/* Generate Character Card */}
-                <button
-                  onClick={() => {
-                    setCharacterMethod('generate');
-                  }}
-                  className={`group relative bg-gradient-to-br from-purple-50 to-white border-2 rounded-xl p-6 hover:shadow-xl transition-all text-left ${
-                    characterMethod === 'generate'
-                      ? 'border-purple-600 bg-purple-50'
-                      : 'border-purple-200 hover:border-purple-300'
-                  }`}
-                >
-                  <div className="flex flex-col h-full">
-                    <div className="mb-4">
-                      <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                        <Wand2 className="w-8 h-8 text-purple-600" />
-                      </div>
-                      <h4 className="text-lg font-bold text-gray-900 mb-2">Generate with AI</h4>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Let AI create character references based on your description
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <Check className="w-4 h-4 text-green-600" />
-                        <span>AI-generated art</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <Check className="w-4 h-4 text-green-600" />
-                        <span>Multiple variations</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <Check className="w-4 h-4 text-green-600" />
-                        <span>Perfect consistency</span>
-                      </div>
-                    </div>
                   </div>
                 </button>
               </div>
@@ -995,7 +1019,7 @@ export default function CreateStoryModal({
 
             {step === 'character-method' && (
               <button
-                onClick={() => setStep('custom')}
+                onClick={handleBack}
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
               >
                 <ChevronLeft className="w-4 h-4" />

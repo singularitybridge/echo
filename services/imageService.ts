@@ -17,13 +17,19 @@ export interface GeneratedImage {
   assetId?: string; // Asset ID for assets loaded from database
 }
 
+// Global lock to prevent duplicate generations
+let generationInProgress = false;
+let lastGenerationKey = '';
+
 /**
  * Generate an image using Gemini 2.5 Flash Image (Nano Banana)
  */
 export const generateImage = async (
   params: GenerateImageParams,
 ): Promise<GeneratedImage> => {
-  console.log('Starting image generation with params:', params);
+  const timestamp = new Date().toISOString();
+  console.log(`\n[generateImage] ${timestamp} - API CALL START`);
+  console.log('[generateImage] Params:', params);
 
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   if (!apiKey) {
@@ -89,7 +95,7 @@ export const generateImage = async (
     throw new Error('No image was generated in the response');
   }
 
-  console.log('Successfully extracted image bytes, length:', imageBytes.length);
+  console.log('[generateImage] ✅ Successfully extracted image bytes, length:', imageBytes.length);
 
   // Convert base64 to blob
   const byteString = atob(imageBytes);
@@ -100,6 +106,9 @@ export const generateImage = async (
   }
   const blob = new Blob([ab], { type: mimeType });
   const objectUrl = URL.createObjectURL(blob);
+
+  const completionTime = new Date().toISOString();
+  console.log(`[generateImage] ${completionTime} - API CALL COMPLETE\n`);
 
   return {
     imageBytes,
@@ -117,25 +126,58 @@ export const generateCharacterReferences = async (
   numberOfImages: number = 2,
   aspectRatio: '16:9' | '9:16' = '16:9',
 ): Promise<GeneratedImage[]> => {
-  const prompts = [
-    `Portrait of ${characterDescription}, front-facing, neutral friendly expression, high quality photorealistic, professional lighting`,
-    `Portrait of ${characterDescription}, smiling and gesturing expressively, high quality photorealistic, professional lighting`,
-    `Full body shot of ${characterDescription}, casual pose, high quality photorealistic, professional lighting`,
-  ].slice(0, numberOfImages);
+  // Log function call with timestamp and stack trace
+  const timestamp = new Date().toISOString();
+  const callStack = new Error().stack?.split('\n').slice(2, 5).join('\n') || 'no stack';
+  console.log(`\n[imageService] ${timestamp} - generateCharacterReferences CALLED`);
+  console.log('[imageService] Parameters:', { characterDescription, numberOfImages, aspectRatio });
+  console.log('[imageService] Current lock state:', { generationInProgress, lastGenerationKey });
+  console.log('[imageService] Call stack:\n', callStack);
 
-  const images: GeneratedImage[] = [];
+  // Create a unique key for this generation request
+  const generationKey = `${characterDescription}-${numberOfImages}-${aspectRatio}`;
 
-  for (const prompt of prompts) {
-    try {
-      const image = await generateImage({ prompt, aspectRatio });
-      images.push(image);
-    } catch (error) {
-      console.error('Failed to generate image for prompt:', prompt, error);
-      throw error;
-    }
+  // Check if this exact generation is already in progress or was just completed
+  if (generationInProgress && lastGenerationKey === generationKey) {
+    console.log('[imageService] ❌ BLOCKED - Generation already in progress for this request');
+    throw new Error('Generation already in progress');
   }
 
-  return images;
+  console.log('[imageService] ✅ PROCEEDING - Starting generation with key:', generationKey);
+  generationInProgress = true;
+  lastGenerationKey = generationKey;
+
+  try {
+    const prompts = [
+      `Portrait of ${characterDescription}, front-facing, neutral friendly expression, high quality photorealistic, professional lighting`,
+      `Portrait of ${characterDescription}, smiling and gesturing expressively, high quality photorealistic, professional lighting`,
+      `Full body shot of ${characterDescription}, casual pose, high quality photorealistic, professional lighting`,
+    ].slice(0, numberOfImages);
+
+    const images: GeneratedImage[] = [];
+
+    for (let i = 0; i < prompts.length; i++) {
+      const prompt = prompts[i];
+      console.log(`[imageService] 🎨 Generating image ${i + 1}/${prompts.length}`);
+      try {
+        const image = await generateImage({ prompt, aspectRatio });
+        images.push(image);
+        console.log(`[imageService] ✅ Image ${i + 1}/${prompts.length} complete`);
+      } catch (error) {
+        console.error(`[imageService] ❌ Failed to generate image ${i + 1}:`, error);
+        throw error;
+      }
+    }
+
+    console.log('[imageService] 🎉 All images generated, releasing lock');
+    return images;
+  } finally {
+    // Release lock after a short delay to prevent immediate re-calls
+    setTimeout(() => {
+      generationInProgress = false;
+      console.log('[imageService] Lock released');
+    }, 1000);
+  }
 };
 
 export interface EditImageParams {

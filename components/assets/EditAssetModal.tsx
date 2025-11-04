@@ -148,10 +148,12 @@ export default function EditAssetModal({
 
       switch (e.key) {
         case 'ArrowLeft':
+        case 'ArrowUp':
           e.preventDefault();
           navigateVersion(-1);
           break;
         case 'ArrowRight':
+        case 'ArrowDown':
           e.preventDefault();
           navigateVersion(1);
           break;
@@ -387,7 +389,7 @@ export default function EditAssetModal({
                     onClick={() => navigateVersion(-1)}
                     disabled={!canNavigateLeft || isLoadingLineage}
                     className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Previous version (←)"
+                    title="Previous version (← or ↑)"
                   >
                     <ChevronLeft className="w-4 h-4 text-gray-600" />
                   </button>
@@ -395,7 +397,7 @@ export default function EditAssetModal({
                     onClick={() => navigateVersion(1)}
                     disabled={!canNavigateRight || isLoadingLineage}
                     className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Next version (→)"
+                    title="Next version (→ or ↓)"
                   >
                     <ChevronRight className="w-4 h-4 text-gray-600" />
                   </button>
@@ -545,7 +547,7 @@ export default function EditAssetModal({
 
               <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                 <div className="flex items-center gap-4">
-                  <span>← → Navigate versions</span>
+                  <span>← → ↑ ↓ Navigate versions</span>
                   <span>/ Focus input</span>
                 </div>
                 <span>Cmd+Enter Send</span>
