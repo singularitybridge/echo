@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2 } from 'lucide-react';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
@@ -20,7 +20,9 @@ import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { PlaybackBar } from './PlaybackBar';
 import AssetPickerModal from './assets/AssetPickerModal';
+import EditAssetModal from './assets/EditAssetModal';
 import { AssetLoader } from '../utils/assetLoader';
+import type { Asset } from '@/types/asset';
 
 interface SceneManagerProps {
   projectId: string;
@@ -46,6 +48,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [showScriptPreview, setShowScriptPreview] = useState<boolean>(false);
+  const [showEditAssetModal, setShowEditAssetModal] = useState<boolean>(false);
+  const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
 
   // Chat state for script editing
   const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; timestamp: number}>>([]);
@@ -1434,8 +1438,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
                     return (
                       <div className="flex items-center gap-3">
-                        {/* Thumbnail */}
-                        <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200">
+                        {/* Thumbnail with hover edit button */}
+                        <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200 relative group/thumb">
                           {imageUrl ? (
                             <img
                               src={imageUrl}
@@ -1450,6 +1454,39 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                             <div className="w-full h-full flex items-center justify-center bg-gray-50">
                               <ImageIcon size={24} className="text-gray-300" />
                             </div>
+                          )}
+
+                          {/* Edit button overlay - only show for asset references */}
+                          {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Find the asset from AssetLoader
+                                const refIndex = currentRef - 1;
+                                const refImage = combinedRefs[refIndex];
+
+                                // Get the asset from the project's asset attachments
+                                // We need to fetch the actual Asset object from the API
+                                fetch(`/api/assets?projectId=${projectId}`)
+                                  .then(res => res.json())
+                                  .then(data => {
+                                    // Find the asset that matches this reference URL
+                                    const asset = data.assets?.find((a: Asset) =>
+                                      a.url === refImage.objectUrl ||
+                                      refImage.objectUrl.includes(a.id)
+                                    );
+                                    if (asset) {
+                                      setAssetToEdit(asset);
+                                      setShowEditAssetModal(true);
+                                    }
+                                  })
+                                  .catch(err => console.error('Failed to load asset:', err));
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                              title="Edit this asset"
+                            >
+                              <Edit2 className="w-3 h-3 text-indigo-600" />
+                            </button>
                           )}
                         </div>
 
@@ -1766,6 +1803,40 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           sceneId={selectedScene.id}
           currentAttachments={selectedScene.attachedAssets || []}
           onSaveAttachments={handleSaveAssetAttachments}
+        />
+      )}
+
+      {/* Edit Asset Modal */}
+      {assetToEdit && (
+        <EditAssetModal
+          isOpen={showEditAssetModal}
+          onClose={() => {
+            setShowEditAssetModal(false);
+            setAssetToEdit(null);
+          }}
+          asset={assetToEdit}
+          projectId={projectId}
+          onEditComplete={async () => {
+            // Reload combined refs after editing
+            setShowEditAssetModal(false);
+            setAssetToEdit(null);
+
+            // Reload assets from the AssetLoader
+            try {
+              const assetLoader = new AssetLoader(projectId);
+              const loadedAssets = await assetLoader.loadAssets();
+              const assetRefs = loadedAssets.map((asset: any) => ({
+                objectUrl: asset.url,
+                width: asset.width || 1024,
+                height: asset.height || 1792,
+              }));
+
+              // Combine with existing character refs
+              setCombinedRefs([...assetRefs, ...characterRefs]);
+            } catch (error) {
+              console.error('Failed to reload assets:', error);
+            }
+          }}
         />
       )}
 
