@@ -366,8 +366,8 @@ export default function AssetGenerationChatModal({
                   </div>
 
                   {/* Right: Large Active Image */}
-                  <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
-                    <div className="relative max-w-full max-h-full flex items-center justify-center">
+                  <div className="flex-1 flex items-center justify-center bg-gray-50 p-8 overflow-hidden">
+                    <div className="relative w-full h-full flex items-center justify-center">
                       <img
                         src={currentAsset.imageUrl}
                         alt={currentAsset.metadata.type}
