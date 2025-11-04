@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Folder, FileText, ArrowLeft } from 'lucide-react';
+import { Bot, Folder, FileText, ArrowLeft, ChevronDown, ChevronUp, PlayCircle, Loader2 } from 'lucide-react';
 
 interface Agent {
   id: string;
@@ -16,9 +16,22 @@ interface Agent {
   type: 'folder' | 'file';
 }
 
+interface AgentDetails {
+  prompt: string;
+  tests: Array<{
+    id: string;
+    name: string;
+    description: string;
+  }>;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [agentDetails, setAgentDetails] = useState<AgentDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -42,6 +55,34 @@ export default function AgentsPage() {
 
     loadAgents();
   }, []);
+
+  useEffect(() => {
+    const loadAgentDetails = async () => {
+      if (!selectedAgent) {
+        setAgentDetails(null);
+        return;
+      }
+
+      setDetailsLoading(true);
+      try {
+        const response = await fetch(`/api/agents/${selectedAgent.id}`);
+        if (!response.ok) {
+          console.error('Failed to load agent details');
+          setDetailsLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        setAgentDetails(data);
+        setDetailsLoading(false);
+      } catch (err) {
+        console.error('Failed to load agent details:', err);
+        setDetailsLoading(false);
+      }
+    };
+
+    loadAgentDetails();
+  }, [selectedAgent]);
 
   if (loading) {
     return (
@@ -95,36 +136,104 @@ export default function AgentsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agents.map((agent) => (
-              <div
-                key={agent.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-indigo-100 rounded-lg flex-shrink-0">
-                    {agent.type === 'folder' ? (
-                      <Folder className="w-6 h-6 text-indigo-600" />
-                    ) : (
-                      <FileText className="w-6 h-6 text-indigo-600" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {agent.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                      {agent.description}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        .agents/{agent.path}
-                      </span>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Agents List */}
+            <div className={`${selectedAgent ? 'lg:col-span-1' : 'lg:col-span-3'} grid grid-cols-1 ${selectedAgent ? '' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6`}>
+              {agents.map((agent) => (
+                <button
+                  key={agent.id}
+                  onClick={() => setSelectedAgent(agent)}
+                  className={`bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-all text-left ${
+                    selectedAgent?.id === agent.id ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-indigo-100 rounded-lg flex-shrink-0">
+                      {agent.type === 'folder' ? (
+                        <Folder className="w-6 h-6 text-indigo-600" />
+                      ) : (
+                        <FileText className="w-6 h-6 text-indigo-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {agent.name}
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        {agent.description}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          .agents/{agent.path}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Agent Details */}
+            {selectedAgent && (
+              <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                {detailsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                  </div>
+                ) : agentDetails ? (
+                  <div className="space-y-6">
+                    {/* Prompt Section */}
+                    <div>
+                      <button
+                        onClick={() => setPromptExpanded(!promptExpanded)}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900">Agent Prompt</h3>
+                        {promptExpanded ? (
+                          <ChevronUp className="w-5 h-5 text-gray-600" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-600" />
+                        )}
+                      </button>
+                      {promptExpanded && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+                            {agentDetails.prompt}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tests Section */}
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Tests & Verifications</h3>
+                      {agentDetails.tests.length === 0 ? (
+                        <p className="text-sm text-gray-600">No tests available for this agent.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {agentDetails.tests.map((test) => (
+                            <div key={test.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-gray-900">{test.name}</h4>
+                                <p className="text-sm text-gray-600">{test.description}</p>
+                              </div>
+                              <button
+                                className="ml-4 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                                title="Run test"
+                              >
+                                <PlayCircle className="w-5 h-5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-600 py-12">Failed to load agent details</p>
+                )}
               </div>
-            ))}
+            )}
           </div>
         )}
 
