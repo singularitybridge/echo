@@ -7,25 +7,25 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 
 /**
- * GET /api/agents/[id] - Get agent details including prompt and tests
+ * GET /api/agents/[agentId] - Get agent details including prompt and tests
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { agentId } = await params;
     const agentsDir = path.join(process.cwd(), '.agents');
 
-    // Try folder-based agent first (.agents/{id}/prompt.md)
-    let promptPath = path.join(agentsDir, id, 'prompt.md');
+    // Try folder-based agent first (.agents/{agentId}/prompt.md)
+    let promptPath = path.join(agentsDir, agentId, 'prompt.md');
     let promptContent: string;
 
     try {
       promptContent = await readFile(promptPath, 'utf-8');
     } catch {
-      // Try standalone file (.agents/{id}.md)
-      promptPath = path.join(agentsDir, `${id}.md`);
+      // Try standalone file (.agents/{agentId}.md)
+      promptPath = path.join(agentsDir, `${agentId}.md`);
       try {
         promptContent = await readFile(promptPath, 'utf-8');
       } catch {
@@ -37,7 +37,7 @@ export async function GET(
     }
 
     // Define tests based on agent type
-    const tests = getTestsForAgent(id);
+    const tests = getTestsForAgent(agentId);
 
     return NextResponse.json({
       prompt: promptContent,

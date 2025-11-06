@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {generateText} from './geminiService';
+import {executeStoryGenAgent} from './agentHubService';
 import {STORY_PROMPTS} from '../constants/storyPrompts';
 import {
   QuickPathParams,
@@ -50,12 +50,8 @@ export const generateQuickPathStory = async (
     .replace('{energy}', params.energy);
 
   try {
-    // Generate story using Gemini 2.0 Flash
-    const response = await generateText({
-      prompt,
-      temperature: 0.8, // Higher creativity for story generation
-      maxTokens: 2048,
-    });
+    // Generate story using Agent Hub (story-gen-agent)
+    const response = await executeStoryGenAgent(prompt);
 
     // Parse JSON response (handles markdown code blocks)
     const story = parseAIResponse(response) as StoryDraft;
@@ -98,12 +94,8 @@ export const generateCustomPathStory = async (
     .replace('{mood}', params.mood || 'to be determined by AI');
 
   try {
-    // Generate story using Gemini 2.0 Flash
-    const response = await generateText({
-      prompt,
-      temperature: 0.9, // Even higher creativity for custom stories
-      maxTokens: 2048,
-    });
+    // Generate story using Agent Hub (story-gen-agent)
+    const response = await executeStoryGenAgent(prompt);
 
     // Parse JSON response (handles markdown code blocks)
     const story = parseAIResponse(response) as StoryDraft;
@@ -166,11 +158,8 @@ IMPORTANT:
 Return ONLY the complete refined story as JSON, with no markdown code blocks or additional text.`;
 
   try {
-    const response = await generateText({
-      prompt,
-      temperature: 0.3, // Lower temperature for more faithful refinement
-      maxTokens: 2048,
-    });
+    // Generate refined story using Agent Hub (story-gen-agent)
+    const response = await executeStoryGenAgent(prompt);
 
     // Parse JSON response
     const refinedStory = parseAIResponse(response) as StoryDraft;
@@ -193,11 +182,8 @@ Provide a brief, natural summary of what you changed. Start with "I've" and be s
 
 Example: "I've changed the character's name from Sarah to Emma throughout the story, including in the title, description, and all dialogue. I also updated the tone in Scene 2 to be more lighthearted as requested."`;
 
-    const summaryResponse = await generateText({
-      prompt: summaryPrompt,
-      temperature: 0.5,
-      maxTokens: 200,
-    });
+    // Generate summary using Agent Hub (story-gen-agent)
+    const summaryResponse = await executeStoryGenAgent(summaryPrompt);
 
     const changesSummary = summaryResponse.trim();
 
@@ -246,11 +232,8 @@ export const regenerateScene = async (
     .replace('{nextSceneTitle}', nextSceneTitle);
 
   try {
-    const response = await generateText({
-      prompt,
-      temperature: 0.8,
-      maxTokens: 512,
-    });
+    // Generate scene using Agent Hub (story-gen-agent)
+    const response = await executeStoryGenAgent(prompt);
 
     const scene = parseAIResponse(response);
 

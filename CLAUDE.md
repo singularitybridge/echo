@@ -36,9 +36,13 @@ NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key_here
 
 # Optional for audio transcription in evaluations
 NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+
+# Required for AI story generation via Agent Hub
+AGENT_HUB_API_URL=http://localhost:3000/assistant
+AGENT_HUB_API_KEY=your_agent_hub_api_key_here
 ```
 
-The Gemini API key is **required**. OpenAI API key is optional (only needed for audio transcription during evaluation).
+The Gemini API key and Agent Hub credentials are **required**. OpenAI API key is optional (only needed for audio transcription during evaluation).
 
 ## Architecture & Key Concepts
 
