@@ -203,6 +203,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             updatedAt: story.metadata.updatedAt,
             tags: story.metadata.tags || [],
             generationMetadata: story.metadata.generationMetadata,
+            deletedStoryStorageAssets: story.script.deletedStoryStorageAssets || [],
           };
 
           setProject(projectData);
@@ -244,8 +245,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       const aspectRatio = (project.aspectRatio ?? AspectRatio.PORTRAIT) === AspectRatio.PORTRAIT ? '9:16' : '16:9';
 
       // Sync both story storage and legacy refs to database (so they appear in asset library)
+      // Pass deletedStoryStorageAssets list to prevent re-importing user-deleted assets
       await Promise.all([
-        AssetLoader.syncStoryStorageToDatabase(projectId, aspectRatio),
+        AssetLoader.syncStoryStorageToDatabase(
+          projectId,
+          aspectRatio,
+          project.deletedStoryStorageAssets || []
+        ),
         AssetLoader.syncLegacyRefsToDatabase(projectId, aspectRatio),
       ]);
 
@@ -373,11 +379,14 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     const timeoutId = setTimeout(async () => {
       try {
-        // Save script (scenes) to story storage
+        // Save script (scenes + deletion tracking) to story storage
         const response = await fetch(`/api/stories/${project.id}/script`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scenes: project.scenes }),
+          body: JSON.stringify({
+            scenes: project.scenes,
+            deletedStoryStorageAssets: project.deletedStoryStorageAssets || [],
+          }),
         });
 
         if (!response.ok) {
@@ -784,6 +793,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         startFrameDataUrl
       );
 
+      // Extract first frame from generated video for thumbnails
+      const firstFrameDataUrl = await extractFrameFromVideo(video.blob, 0);
+      console.log('Extracted first frame from generated video for thumbnail');
+
       // Extract last frame from generated video for next scene's continuity
       const lastFrameDataUrl = await extractFrameFromVideo(video.blob, Math.max(0, scene.duration - 0.5));
       console.log('Extracted last frame from generated video for shot continuity');
@@ -811,6 +824,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   generated: true,
                   videoUrl: serverUrl,
                   settings: sceneSettings,
+                  firstFrameDataUrl, // Store first frame for thumbnails
                   lastFrameDataUrl, // Store last frame for next scene
                   evaluation: undefined, // Clear previous evaluation
                 }
@@ -1729,13 +1743,107 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             selectedScene.referenceMode ??
             (scenes.findIndex((s) => s.id === selectedScene.id) === 0 ? 1 : 'previous')
           }
-          onSelectReference={(ref) => {
+          onSelectReference={async (ref) => {
+            // Get the asset's persistent URL if a numbered reference is selected
+            let firstFrameDataUrl: string | undefined = undefined;
+            if (typeof ref === 'number') {
+              const refIndex = ref - 1;
+              if (refIndex >= 0 && refIndex < combinedRefs.length) {
+                const selectedRef = combinedRefs[refIndex];
+
+                console.log('🔍 [Asset Selection Debug] Selected reference:', {
+                  refIndex,
+                  assetId: selectedRef.assetId,
+                  objectUrl: selectedRef.objectUrl,
+                  hasAssetId: !!selectedRef.assetId
+                });
+
+                // If we have an assetId, try to fetch the real asset
+                if (selectedRef.assetId) {
+                  try {
+                    console.log('📡 Attempting to fetch asset by ID:', selectedRef.assetId);
+                    const response = await fetch(`/api/assets/${selectedRef.assetId}`);
+                    console.log('📡 Asset fetch response:', response.status, response.ok);
+                    if (response.ok) {
+                      const asset = await response.json();
+                      console.log('✅ Fetched asset:', {
+                        id: asset.id,
+                        url: asset.url
+                      });
+                      firstFrameDataUrl = asset.url; // Use asset.url, not asset.imageUrl
+                    }
+                  } catch (error) {
+                    console.error('❌ Failed to fetch asset by assetId:', error);
+                  }
+                }
+
+                // If no assetId or API fetch failed, try to find asset by matching URL
+                if (!firstFrameDataUrl) {
+                  console.log('🔍 No url from direct fetch, searching all assets...');
+                  try {
+                    const response = await fetch(`/api/assets?projectId=${projectId}`);
+                    if (response.ok) {
+                      const data = await response.json();
+                      console.log('📦 All project assets:', {
+                        count: data.assets?.length,
+                        assets: data.assets?.map((a: Asset) => ({
+                          id: a.id,
+                          url: a.url
+                        }))
+                      });
+
+                      // Find asset by checking if the blob URL or objectUrl contains the asset ID
+                      const matchingAsset = data.assets?.find((a: Asset) => {
+                        const urlMatch = selectedRef.objectUrl.includes(a.id);
+                        const exactMatch = a.url === selectedRef.objectUrl;
+                        console.log(`🔎 Checking asset ${a.id}:`, {
+                          urlMatch,
+                          exactMatch,
+                          assetUrl: a.url,
+                          selectedUrl: selectedRef.objectUrl
+                        });
+                        return urlMatch || exactMatch;
+                      });
+
+                      if (matchingAsset) {
+                        console.log('✅ Found matching asset:', {
+                          id: matchingAsset.id,
+                          url: matchingAsset.url
+                        });
+                        firstFrameDataUrl = matchingAsset.url; // Use asset.url
+                      } else {
+                        console.log('❌ No matching asset found');
+                      }
+                    }
+                  } catch (error) {
+                    console.error('❌ Failed to find matching asset:', error);
+                  }
+                }
+
+                // Last resort: use the objectUrl (might be blob or API URL)
+                if (!firstFrameDataUrl) {
+                  console.log('⚠️ Using fallback objectUrl:', selectedRef.objectUrl);
+                  firstFrameDataUrl = selectedRef.objectUrl;
+                }
+
+                console.log('💾 Final firstFrameDataUrl to save:', firstFrameDataUrl);
+              }
+            }
+
             setProject((prevProject) => {
               if (!prevProject) return prevProject;
+
               return {
                 ...prevProject,
                 scenes: prevProject.scenes.map((s) =>
-                  s.id === selectedScene.id ? { ...s, referenceMode: ref } : s
+                  s.id === selectedScene.id
+                    ? {
+                        ...s,
+                        referenceMode: ref,
+                        // Set firstFrameDataUrl so homepage can use it for thumbnails
+                        firstFrameDataUrl: firstFrameDataUrl ?? s.firstFrameDataUrl
+                      }
+                    : s
                 ),
               };
             });

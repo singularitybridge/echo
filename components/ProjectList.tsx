@@ -80,14 +80,36 @@ const ProjectList: React.FC = () => {
 
     for (const project of projects) {
       try {
-        // Try to get assets from story storage API
+        // Try to get first scene's video frame from story API
+        const storyResponse = await fetch(`/api/stories/${project.id}`);
+        if (storyResponse.ok) {
+          const story = await storyResponse.json();
+          const firstScene = story.script?.scenes?.[0];
+
+          // First priority: Use firstFrameDataUrl if available (start frame of video)
+          if (firstScene?.firstFrameDataUrl) {
+            thumbnailMap[project.id] = firstScene.firstFrameDataUrl;
+            continue;
+          }
+
+          // Second priority: Use video URL's first frame if available
+          if (firstScene?.videoUrl) {
+            thumbnailMap[project.id] = firstScene.videoUrl;
+            continue;
+          }
+        }
+      } catch (err) {
+        // Continue to fallback options
+      }
+
+      try {
+        // Fallback 1: Character assets from new storage
         const response = await fetch(`/api/stories/${project.id}/assets?type=character`);
         if (response.ok) {
           const data = await response.json();
           const characterAssets = data.assets?.characters || [];
 
           if (characterAssets.length > 0) {
-            // Use the first asset as thumbnail
             const firstAsset = characterAssets[0];
             const filename = firstAsset.split('/').pop();
             thumbnailMap[project.id] = `/api/stories/${project.id}/assets/characters/${filename}`;
@@ -95,10 +117,10 @@ const ProjectList: React.FC = () => {
           }
         }
       } catch (err) {
-        // Try fallback to old location
+        // Continue to next fallback
       }
 
-      // Fallback: Check old generated-refs location
+      // Fallback 2: Check old generated-refs location
       const isPortrait = project.aspectRatio === '9:16';
       const oldRefPath = isPortrait
         ? `/generated-refs/${project.id}/character-ref-portrait-1.png`
@@ -288,7 +310,7 @@ const ProjectList: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => router.push('/agents')}
-                className="p-2.5 bg-gray-600 text-white rounded-full hover:bg-gray-700 transition-all hover:scale-105 cursor-pointer"
+                className="p-2.5 text-gray-600 hover:text-gray-900 transition-all hover:scale-105 cursor-pointer"
                 title="AI Agents"
                 aria-label="AI Agents"
               >
@@ -296,7 +318,7 @@ const ProjectList: React.FC = () => {
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all hover:scale-105 cursor-pointer"
+                className="p-2.5 text-indigo-600 hover:text-indigo-700 transition-all hover:scale-105 cursor-pointer"
                 title="Create New Story"
                 aria-label="Create New Story"
               >
@@ -323,11 +345,20 @@ const ProjectList: React.FC = () => {
                 <div className="relative w-full bg-gray-100">
                   {thumbnail ? (
                     <div className="relative w-full aspect-[9/16] overflow-hidden">
-                      <img
-                        src={thumbnail}
-                        alt={project.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
+                      {thumbnail.endsWith('.mp4') ? (
+                        <video
+                          src={thumbnail}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <img
+                          src={thumbnail}
+                          alt={project.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      )}
                       {/* Gradient overlay for better text contrast */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
