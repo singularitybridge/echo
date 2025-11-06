@@ -13,6 +13,7 @@ import { storyStorage } from '../../../../../services/storyStorage';
  * Request body:
  * {
  *   scenes: Scene[]
+ *   deletedStoryStorageAssets?: string[]
  * }
  */
 export async function PUT(
@@ -32,6 +33,7 @@ export async function PUT(
 
     const changesSummary = await storyStorage.updateScript(id, {
       scenes: body.scenes,
+      deletedStoryStorageAssets: body.deletedStoryStorageAssets || [],
     });
 
     return NextResponse.json({
