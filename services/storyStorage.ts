@@ -41,6 +41,11 @@ export interface StoryMetadata {
 
 export interface StoryScript {
   scenes: Scene[];
+
+  // Track story storage assets that have been explicitly deleted by user
+  // Stores filenames (e.g., "character-ref-design-1762267856949.png")
+  // to prevent auto-sync from re-importing them
+  deletedStoryStorageAssets?: string[];
 }
 
 export interface StoryConfig {

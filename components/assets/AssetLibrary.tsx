@@ -24,6 +24,7 @@ import AssetCard from './AssetCard';
 import AssetGenerationChatModal from './AssetGenerationChatModal';
 import UploadAssetModal from './UploadAssetModal';
 import EditAssetModal from './EditAssetModal';
+import { AlertDialog } from '../AlertDialog';
 
 interface AssetLibraryProps {
   projectId: string;
@@ -43,6 +44,8 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Load assets on mount
   useEffect(() => {
@@ -75,17 +78,23 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
     }
   };
 
-  const handleDeleteAsset = async (assetId: string) => {
-    if (!confirm('Are you sure you want to delete this asset?')) {
-      return;
+  const handleDeleteAsset = (assetId: string) => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (asset) {
+      setAssetToDelete(asset);
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!assetToDelete) return;
 
     try {
-      await assetStorage.deleteAsset(assetId);
+      await assetStorage.deleteAsset(assetToDelete.id);
+      setAssetToDelete(null);
       await loadAssets(); // Reload assets
     } catch (error) {
       console.error('Failed to delete asset:', error);
-      alert('Failed to delete asset');
+      setDeleteError('Failed to delete asset. Please try again.');
     }
   };
 
@@ -331,6 +340,29 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         }}
         asset={assetToEdit}
         onEditComplete={loadAssets}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        isOpen={!!assetToDelete}
+        onClose={() => setAssetToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Asset"
+        description={`Are you sure you want to delete "${assetToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
+
+      {/* Delete Error Dialog */}
+      <AlertDialog
+        isOpen={!!deleteError}
+        onClose={() => setDeleteError(null)}
+        onConfirm={() => setDeleteError(null)}
+        title="Error"
+        description={deleteError || 'An error occurred'}
+        confirmText="OK"
+        variant="destructive"
       />
     </div>
   );

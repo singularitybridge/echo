@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { unlink } from 'fs/promises';
+import { unlink, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { getAsset, updateAsset, deleteAsset } from '@/services/assetStorage';
+import type { Project } from '@/types/project';
 
 /**
  * GET - Get a single asset by ID
@@ -130,6 +131,60 @@ export async function DELETE(
     const thumbnailPath = join(ASSETS_DIR, `${assetId}.thumb.${asset.format}`);
     if (existsSync(thumbnailPath)) {
       await unlink(thumbnailPath);
+    }
+
+    // If this is a story-storage asset, track it as deleted to prevent re-import
+    if (asset.tags.includes('story-storage')) {
+      try {
+        // Extract filename from description (format: "Character reference from story storage: filename.png")
+        const match = asset.description.match(/story storage: (.+)$/);
+        if (match && match[1]) {
+          const filename = match[1];
+
+          // Try story storage first (most projects are here)
+          const STORY_SCRIPT_PATH = join(process.cwd(), 'stories', asset.projectId, 'script.json');
+
+          if (existsSync(STORY_SCRIPT_PATH)) {
+            // Project is in story storage
+            const scriptContent = await readFile(STORY_SCRIPT_PATH, 'utf-8');
+            const script = JSON.parse(scriptContent);
+
+            const deletedAssets = script.deletedStoryStorageAssets || [];
+            if (!deletedAssets.includes(filename)) {
+              deletedAssets.push(filename);
+              script.deletedStoryStorageAssets = deletedAssets;
+
+              // Save updated script
+              await writeFile(STORY_SCRIPT_PATH, JSON.stringify(script, null, 2), 'utf-8');
+              console.log(`✅ Tracked deleted story storage asset in story storage: ${filename}`);
+            }
+          } else {
+            // Try legacy projects database
+            const DB_PATH = join(process.cwd(), 'data', 'projects.db.json');
+
+            if (existsSync(DB_PATH)) {
+              const dbContent = await readFile(DB_PATH, 'utf-8');
+              const db = JSON.parse(dbContent);
+
+              const project = db.projects[asset.projectId] as Project;
+              if (project) {
+                const deletedAssets = project.deletedStoryStorageAssets || [];
+                if (!deletedAssets.includes(filename)) {
+                  deletedAssets.push(filename);
+                  project.deletedStoryStorageAssets = deletedAssets;
+
+                  // Save updated database
+                  await writeFile(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
+                  console.log(`✅ Tracked deleted story storage asset in projects.db: ${filename}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Don't fail the deletion if tracking fails
+        console.error('❌ Failed to track deleted story storage asset:', error);
+      }
     }
 
     // Remove from metadata using unified storage

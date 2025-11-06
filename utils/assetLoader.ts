@@ -255,7 +255,8 @@ export class AssetLoader {
    */
   static async syncStoryStorageToDatabase(
     projectId: string,
-    aspectRatio: '9:16' | '16:9' = '9:16'
+    aspectRatio: '9:16' | '16:9' = '9:16',
+    deletedStoryStorageAssets: string[] = []
   ): Promise<{ synced: number; skipped: number }> {
     let synced = 0;
     let skipped = 0;
@@ -278,6 +279,12 @@ export class AssetLoader {
         try {
           // Extract filename from asset path
           const filename = ref.objectUrl.split('/').pop() || '';
+
+          // Check if this file has been explicitly deleted by user
+          if (deletedStoryStorageAssets.includes(filename)) {
+            skipped++;
+            continue;
+          }
 
           // Check if this specific file is already synced
           const alreadySynced = existingAssets.some(

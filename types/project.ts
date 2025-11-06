@@ -37,6 +37,7 @@ export interface Scene {
   videoUrl?: string;
   videoBlob?: Blob;
   settings?: GenerationSettings;
+  firstFrameDataUrl?: string; // First frame of video - used for thumbnails
   lastFrameDataUrl?: string; // For shot continuity - used as start frame for next scene
   referenceMode?: 'previous' | number; // 'previous' = use previous shot, number = use specific ref (1-based)
 
@@ -62,4 +63,9 @@ export interface Project {
 
   // Generation metadata (optional, for AI-generated stories)
   generationMetadata?: GenerationMetadata;
+
+  // Track story storage assets that have been explicitly deleted by user
+  // Stores filenames (e.g., "character-ref-design-1762267856949.png")
+  // to prevent auto-sync from re-importing them
+  deletedStoryStorageAssets?: string[];
 }
