@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { generateVideo as generateVideoGemini } from './geminiService';
+import { generateVideoWithFal } from './falService';
 import {
   GenerateVideoParams,
   GenerationMode,
@@ -74,12 +75,27 @@ export const generateVideo = async (
 
   // Use FRAMES_TO_VIDEO mode when start frame is provided (shot continuity)
   // Use REFERENCES_TO_VIDEO mode when only references are provided (character consistency)
+  // For portrait aspect ratio (9:16), always use FRAMES_TO_VIDEO with single reference
+  // because reference-to-video doesn't support aspect_ratio parameter
   // Use TEXT_TO_VIDEO mode otherwise
   let mode: GenerationMode;
   if (startFrame) {
     mode = GenerationMode.FRAMES_TO_VIDEO;
   } else if (referenceImages.length > 0) {
-    mode = GenerationMode.REFERENCES_TO_VIDEO;
+    // For portrait videos, use image-to-video (FRAMES_TO_VIDEO) with first reference only
+    // This ensures correct aspect ratio at the cost of using only 1 reference image
+    if (aspectRatio === AspectRatio.PORTRAIT) {
+      mode = GenerationMode.FRAMES_TO_VIDEO;
+      // Convert first reference to startFrame for portrait mode
+      const firstRef = referenceImages[0];
+      startFrame = {
+        file: firstRef.file,
+        base64: firstRef.base64,
+      };
+      console.log('Portrait mode: Using first reference as start frame for aspect ratio control');
+    } else {
+      mode = GenerationMode.REFERENCES_TO_VIDEO;
+    }
   } else {
     mode = GenerationMode.TEXT_TO_VIDEO;
   }
@@ -101,10 +117,12 @@ export const generateVideo = async (
     isLooping: settings?.isLooping || false,
   };
 
-  const result = await generateVideoGemini(params);
+  // Use Fal.ai for video generation (replaced Gemini due to quota limits)
+  console.log('Using Fal.ai for video generation');
+  const result = await generateVideoWithFal(params);
 
   // Track cost for this generation
-  const duration = result.video.videoDuration || 8; // Default to 8 seconds if not available
+  const duration = 8; // Fal.ai default is 8 seconds
   const resolutionKey = params.resolution === Resolution.P1080 ? '1080p' : '720p';
   const modelName = params.model === VeoModel.VEO ? 'veo-3.1' : 'veo-2';
 
@@ -114,6 +132,6 @@ export const generateVideo = async (
   return {
     objectUrl: result.objectUrl,
     blob: result.blob,
-    uri: result.uri,
+    uri: result.url, // Fal.ai returns 'url' instead of 'uri'
   };
 };

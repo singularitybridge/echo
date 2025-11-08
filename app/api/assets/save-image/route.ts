@@ -38,13 +38,17 @@ export async function POST(request: NextRequest) {
       await mkdir(assetDir, { recursive: true });
     }
 
+    // Detect file extension from the uploaded file name
+    const fileName = (image as File).name || `${assetId}.png`;
+    const fileExt = fileName.split('.').pop() || 'png';
+
     // Save image file
-    const imagePath = join(assetDir, `${assetId}.png`);
+    const imagePath = join(assetDir, `${assetId}.${fileExt}`);
     const imageBuffer = Buffer.from(await image.arrayBuffer());
     await writeFile(imagePath, imageBuffer);
 
     // Return URL to the saved image (relative to public directory)
-    const imageUrl = `/assets/${projectId}/${type}/${assetId}.png`;
+    const imageUrl = `/assets/${projectId}/${type}/${assetId}.${fileExt}`;
 
     return NextResponse.json({
       url: imageUrl,

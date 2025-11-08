@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { trackEvaluation } from './costTrackingService';
+import { extractFirstFrame, extractLastFrame } from './frameExtractionService';
 
 export interface FrameEvaluation {
   frameType: 'first' | 'last';
@@ -359,6 +360,8 @@ Respond in JSON format:
  * Evaluate a generated video
  */
 export const evaluateVideo = async (
+  projectId: string,
+  sceneId: string,
   videoBlob: Blob,
   videoDuration: number,
   prompt: string,
@@ -367,10 +370,10 @@ export const evaluateVideo = async (
 ): Promise<VideoEvaluation> => {
   console.log('Starting video evaluation...');
 
-  // Extract first and last frames
-  console.log('Extracting frames...');
-  const firstFrameUrl = await extractFrameFromVideo(videoBlob, 0.1);
-  const lastFrameUrl = await extractFrameFromVideo(videoBlob, Math.max(0, videoDuration - 0.5));
+  // Extract first and last frames using server-side FFmpeg for frame-perfect extraction
+  console.log('Extracting frames using server-side FFmpeg...');
+  const firstFrameUrl = await extractFirstFrame(projectId, sceneId);
+  const lastFrameUrl = await extractLastFrame(projectId, sceneId);
 
   // Evaluate frames
   console.log('Evaluating frames with Gemini...');

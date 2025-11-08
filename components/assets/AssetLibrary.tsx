@@ -21,7 +21,7 @@ import type { Asset, AssetType, AssetLibraryResponse, AssetProvider } from '@/ty
 import type { AspectRatio } from '@/types/project';
 import { assetStorage } from '@/services/assetStorage.server';
 import AssetCard from './AssetCard';
-import AssetGenerationChatModal from './AssetGenerationChatModal';
+import GenerateAssetModal from './GenerateAssetModal';
 import UploadAssetModal from './UploadAssetModal';
 import EditAssetModal from './EditAssetModal';
 import { AlertDialog } from '../AlertDialog';
@@ -115,12 +115,25 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         // Generate unique ID for the asset
         const assetId = `asset-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+        // Detect file extension from MIME type
+        let fileExt = 'png';
+        if (assetData.imageBlob.type === 'image/jpeg' || assetData.imageBlob.type === 'image/jpg') {
+          fileExt = 'jpg';
+        } else if (assetData.imageBlob.type === 'image/webp') {
+          fileExt = 'webp';
+        }
+
+        // Log for debugging
+        console.log('💾 Saving asset with blob type:', assetData.imageBlob.type);
+        console.log('💾 Detected file extension:', fileExt);
+
         // Save the image file
         const imageUrl = await assetStorage.saveAssetImage(
           projectId,
           assetId,
           assetData.type,
-          assetData.imageBlob
+          assetData.imageBlob,
+          fileExt
         );
 
         // Create asset metadata
@@ -316,7 +329,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
       </div>
 
       {/* Generate Asset Modal */}
-      <AssetGenerationChatModal
+      <GenerateAssetModal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
         projectId={projectId}

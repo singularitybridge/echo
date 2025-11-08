@@ -243,13 +243,14 @@ class AssetStorageServer {
     projectId: string,
     assetId: string,
     type: string,
-    blob: Blob
+    blob: Blob,
+    fileExt: string = 'png'
   ): Promise<string> {
     const formData = new FormData();
     formData.append('projectId', projectId);
     formData.append('assetId', assetId);
     formData.append('type', type);
-    formData.append('image', blob, `${assetId}.png`);
+    formData.append('image', blob, `${assetId}.${fileExt}`);
 
     const response = await fetch('/api/assets/save-image', {
       method: 'POST',

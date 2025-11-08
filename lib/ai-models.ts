@@ -3,7 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ModelDefinition, ImageEditingModel } from '@/types/ai-models';
+import {
+  ModelDefinition,
+  ImageEditingModel,
+  GenerationModelDefinition,
+  ImageGenerationModel,
+  VideoGenerationModelDefinition,
+  VideoGenerationModel
+} from '@/types/ai-models';
 
 /**
  * Comprehensive model definitions for all supported AI image editing models
@@ -84,6 +91,138 @@ export const MODEL_DEFINITIONS: Record<ImageEditingModel, ModelDefinition> = {
 };
 
 /**
+ * Comprehensive model definitions for all supported AI image generation models
+ */
+export const GENERATION_MODEL_DEFINITIONS: Record<ImageGenerationModel, GenerationModelDefinition> = {
+  'ideogram-v2': {
+    id: 'ideogram-v2',
+    name: 'Ideogram v2',
+    provider: 'Ideogram AI',
+    endpoint: 'fal-ai/ideogram/v2',
+    icon: 'type',
+    speed: 'fast',
+    tags: ['text-precision'],
+    description:
+      'State-of-the-art text rendering in images. Excels at creating images with clear, readable text and typography.',
+    useCases: [
+      'Posters and marketing materials with text',
+      'Logos and branding assets',
+      'Images requiring precise text integration',
+    ],
+    estimatedTimeSeconds: 3.0,
+    colorAccent: 'blue',
+  },
+  'flux-pro-ultra': {
+    id: 'flux-pro-ultra',
+    name: 'FLUX Pro Ultra',
+    provider: 'Black Forest Labs',
+    endpoint: 'fal-ai/flux-pro/v1.1-ultra',
+    icon: 'sparkles',
+    speed: 'slow',
+    tags: ['creative'],
+    description:
+      'Ultra-high quality image generation with exceptional detail and realism. Best-in-class for professional creative work.',
+    useCases: [
+      'High-resolution marketing assets',
+      'Professional photography-style images',
+      'Detailed character artwork and portraits',
+    ],
+    estimatedTimeSeconds: 8.0,
+    colorAccent: 'purple',
+  },
+  'recraft-v3': {
+    id: 'recraft-v3',
+    name: 'Recraft v3',
+    provider: 'Recraft AI',
+    endpoint: 'fal-ai/recraft/v3/text-to-image',
+    icon: 'palette',
+    speed: 'medium',
+    tags: ['creative', 'text-precision'],
+    description:
+      'Balanced model with strong text rendering and creative flexibility. Great for design-focused applications.',
+    useCases: [
+      'Graphic design and illustrations',
+      'Brand assets with text and imagery',
+      'Creative concept visualization',
+    ],
+    estimatedTimeSeconds: 4.5,
+    colorAccent: 'pink',
+  },
+  'bria-v3': {
+    id: 'bria-v3',
+    name: 'BRIA v3.2',
+    provider: 'BRIA',
+    endpoint: 'bria/text-to-image/3.2',
+    icon: 'image',
+    speed: 'fast',
+    tags: ['creative'],
+    description:
+      'Fast, commercial-safe image generation. Designed for business use with licensed training data.',
+    useCases: [
+      'Commercial marketing materials',
+      'Product visualization',
+      'Brand-safe content creation',
+    ],
+    estimatedTimeSeconds: 3.5,
+    colorAccent: 'green',
+  },
+  'imagen4-ultra': {
+    id: 'imagen4-ultra',
+    name: 'Imagen 4 Ultra',
+    provider: 'Google',
+    endpoint: 'fal-ai/imagen4/preview/ultra',
+    icon: 'sparkles',
+    speed: 'medium',
+    tags: ['creative'],
+    description:
+      'Google\'s latest image generation model with enhanced photorealism and creative control.',
+    useCases: [
+      'Photorealistic imagery',
+      'Concept art and visualization',
+      'High-quality creative content',
+    ],
+    estimatedTimeSeconds: 5.0,
+    colorAccent: 'indigo',
+  },
+  'flux-dev': {
+    id: 'flux-dev',
+    name: 'FLUX Dev',
+    provider: 'Black Forest Labs',
+    endpoint: 'fal-ai/flux/dev',
+    icon: 'zap',
+    speed: 'fast',
+    tags: ['creative'],
+    description:
+      'Developer-focused FLUX model optimized for rapid iteration and experimentation.',
+    useCases: [
+      'Quick prototyping and testing',
+      'Rapid iteration workflows',
+      'Development and experimentation',
+    ],
+    estimatedTimeSeconds: 2.5,
+    colorAccent: 'cyan',
+  },
+  'hidream-i1': {
+    id: 'hidream-i1',
+    name: 'HiDream i1',
+    provider: 'HiDream AI',
+    endpoint: 'fal-ai/hidream-i1-full',
+    icon: 'image',
+    speed: 'medium',
+    tags: ['creative'],
+    description:
+      'High-fidelity image generation with strong prompt following and aesthetic quality.',
+    useCases: [
+      'Creative artwork and illustrations',
+      'Aesthetic visual content',
+      'Detailed prompt interpretation',
+    ],
+    estimatedTimeSeconds: 4.0,
+    colorAccent: 'orange',
+  },
+};
+
+/**
  * Get model definition by ID
  */
 export function getModelDefinition(
@@ -111,6 +250,112 @@ export function getModelsBySpeed(speed: 'fast' | 'medium' | 'slow'): ModelDefini
  */
 export function getModelsBySpeed_sorted(): ModelDefinition[] {
   return getAllModels().sort(
+    (a, b) => a.estimatedTimeSeconds - b.estimatedTimeSeconds
+  );
+}
+
+/**
+ * Get generation model definition by ID
+ */
+export function getGenerationModelDefinition(
+  modelId: ImageGenerationModel
+): GenerationModelDefinition {
+  return GENERATION_MODEL_DEFINITIONS[modelId];
+}
+
+/**
+ * Get all available generation models
+ */
+export function getAllGenerationModels(): GenerationModelDefinition[] {
+  return Object.values(GENERATION_MODEL_DEFINITIONS);
+}
+
+/**
+ * Get generation models filtered by speed
+ */
+export function getGenerationModelsBySpeed(speed: 'fast' | 'medium' | 'slow'): GenerationModelDefinition[] {
+  return getAllGenerationModels().filter((model) => model.speed === speed);
+}
+
+/**
+ * Get generation models sorted by estimated generation time
+ */
+export function getGenerationModelsBySpeed_sorted(): GenerationModelDefinition[] {
+  return getAllGenerationModels().sort(
+    (a, b) => a.estimatedTimeSeconds - b.estimatedTimeSeconds
+  );
+}
+
+/**
+ * Comprehensive model definitions for all supported AI video generation models
+ */
+export const VIDEO_GENERATION_MODEL_DEFINITIONS: Record<VideoGenerationModel, VideoGenerationModelDefinition> = {
+  'veo-3.1': {
+    id: 'veo-3.1',
+    name: 'Veo 3.1',
+    provider: 'Google',
+    icon: 'film',
+    speed: 'slow',
+    description:
+      'Google\'s state-of-the-art video generation model with exceptional quality and character consistency.',
+    useCases: [
+      'High-quality cinematic videos',
+      'Character-consistent storytelling',
+      'Professional video content',
+    ],
+    estimatedTimeSeconds: 120, // ~2 minutes
+    colorAccent: 'indigo',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    maxDuration: 8,
+  },
+  'wan-2.5-i2v': {
+    id: 'wan-2.5-i2v',
+    name: 'Wan 2.5 I2V',
+    provider: 'Wantai Technology (via fal.ai)',
+    icon: 'video',
+    speed: 'fast',
+    description:
+      'Fast image-to-video generation with good motion quality. Optimized for rapid iteration and experimentation.',
+    useCases: [
+      'Quick video prototyping',
+      'Image animation',
+      'Rapid iteration workflows',
+    ],
+    estimatedTimeSeconds: 30, // ~30 seconds
+    colorAccent: 'cyan',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    maxDuration: 5,
+  },
+};
+
+/**
+ * Get video generation model definition by ID
+ */
+export function getVideoGenerationModelDefinition(
+  modelId: VideoGenerationModel
+): VideoGenerationModelDefinition {
+  return VIDEO_GENERATION_MODEL_DEFINITIONS[modelId];
+}
+
+/**
+ * Get all available video generation models
+ */
+export function getAllVideoGenerationModels(): VideoGenerationModelDefinition[] {
+  return Object.values(VIDEO_GENERATION_MODEL_DEFINITIONS);
+}
+
+/**
+ * Get video generation models filtered by speed
+ */
+export function getVideoGenerationModelsBySpeed(speed: 'fast' | 'medium' | 'slow'): VideoGenerationModelDefinition[] {
+  return getAllVideoGenerationModels().filter((model) => model.speed === speed);
+}
+
+/**
+ * Get video generation models sorted by estimated generation time
+ */
+export function getVideoGenerationModelsBySpeed_sorted(): VideoGenerationModelDefinition[] {
+  return getAllVideoGenerationModels().sort(
     (a, b) => a.estimatedTimeSeconds - b.estimatedTimeSeconds
   );
 }

@@ -10,6 +10,14 @@ const nextConfig = {
       bodySizeLimit: '50mb',
     },
   },
+  // Exclude FFmpeg packages from webpack bundling (server-side only)
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('fluent-ffmpeg', '@ffmpeg-installer/ffmpeg');
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

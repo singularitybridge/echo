@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Echo is an AI-powered video creation platform built with Next.js 15 that generates short-form videos using Google's Gemini AI (Veo 2). The application features character consistency across scenes, project-based organization, and AI-powered video quality evaluation.
+Echo is an AI-powered video creation platform built with Next.js 15 that generates short-form videos using Fal.ai's Veo 3.1 API. The application features character consistency across scenes, project-based organization, and AI-powered video quality evaluation.
 
 ## Development Commands
 
@@ -31,7 +31,10 @@ pm2 restart veo-studio
 Copy `.env.example` to `.env.local` and configure:
 
 ```bash
-# Required for video generation
+# Required for Veo 3.1 video generation via Fal.ai
+NEXT_PUBLIC_FAL_KEY=your_fal_api_key_here
+
+# Required for Gemini text generation (story editing, evaluations)
 NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key_here
 
 # Optional for audio transcription in evaluations
@@ -42,15 +45,15 @@ AGENT_HUB_API_URL=http://localhost:3000/assistant
 AGENT_HUB_API_KEY=your_agent_hub_api_key_here
 ```
 
-The Gemini API key and Agent Hub credentials are **required**. OpenAI API key is optional (only needed for audio transcription during evaluation).
+The Fal.ai API key is **required** for video generation. Gemini API key is required for text generation (story editing) and evaluations. Agent Hub credentials are required for AI story creation. OpenAI API key is optional (only needed for audio transcription during evaluation).
 
 ## Architecture & Key Concepts
 
 ### Data Flow Architecture
 
 1. **Project Loading**: Projects are loaded from `/data/*.json` files (static project definitions)
-2. **Video Generation**: Gemini API generates videos → saved to `/public/videos/{projectId}/{sceneId}.mp4`
-3. **Character References**: Reference images stored in `/public/generated-refs/{projectId}/character-ref-{1,2,3}.png`
+2. **Video Generation**: Fal.ai Veo 3.1 API generates videos → saved to `/public/videos/{projectId}/{sceneId}.mp4`
+3. **Character References**: Reference images uploaded to Fal.ai storage, stored in `/public/generated-refs/{projectId}/character-ref-{1,2,3}.png`
 4. **Evaluations**: Saved to `/public/evaluations/{projectId}/{sceneId}.json`
 5. **Project State**: Auto-saved to server via API routes with 1-second debounce
 
@@ -129,7 +132,8 @@ See `docs/STORY_EDIT_API_IMPLEMENTATION.html` for full implementation details an
 - Handles blob URLs → server URLs conversion after generation
 
 **Services Layer**:
-- `geminiService.ts` - Direct integration with Gemini API for video generation
+- `falService.ts` - Fal.ai Veo 3.1 integration for video generation
+- `geminiService.ts` - Gemini AI for text generation (story editing) and evaluations
 - `evaluationService.ts` - Frame extraction, Gemini vision evaluation, Whisper transcription
 - `videoStorage.server.ts` - Client-side API wrapper for video persistence
 - `projectStorage.server.ts` - Project metadata persistence
@@ -162,10 +166,16 @@ The Reference Selection modal provides a visual interface for choosing the start
 
 1. User clicks "Generate Video" in SceneManager
 2. Prompt built from: `scene.prompt + voiceover (as dialogue) + camera angle`
-3. Character references (if present) included as reference images
-4. Gemini API call via `geminiService.ts`
-5. Video blob saved to server via `videoStorage.saveVideo()`
+3. Character references uploaded to Fal.ai storage
+4. Fal.ai Veo 3.1 API call via `falService.ts`
+5. Video blob downloaded and saved to server via `videoStorage.saveVideo()`
 6. Scene updated with server URL for persistence
+
+**Note**: Switched from Gemini API to Fal.ai due to quota limitations. Fal.ai provides:
+- Reliable Veo 3.1 video generation
+- Built-in reference image upload
+- Audio generation support
+- Clear pricing: $0.40/second (with audio)
 
 ### Evaluation System
 
@@ -328,8 +338,14 @@ Then update `/data/projects.db.json` by adding the project to the `projects` obj
 
 **Character refs not loading**: Verify files exist at `/public/generated-refs/{projectId}/character-ref-{1,2,3}.png`
 
-**Generation failing**: Check Gemini API key in `.env.local` and browser console for errors
+**Video generation failing**:
+- Check Fal.ai API key (NEXT_PUBLIC_FAL_KEY) in `.env.local`
+- Verify reference images are valid and under 8MB
+- Check browser console and network tab for errors
+- Ensure you have sufficient Fal.ai credits
 
 **Evaluation not working**: Verify Gemini API key for frame analysis, OpenAI key for audio (optional)
+
+**Story editing not working**: Check Gemini API key and Agent Hub credentials in `.env.local`
 
 **Export failing**: Ensure FFmpeg is installed on server/system

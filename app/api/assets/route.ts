@@ -185,18 +185,111 @@ export async function POST(request: NextRequest) {
     let format: 'png' | 'jpg' | 'webp' = 'png';
 
     // Generate or download image
-    if (body.generationPrompt && body.provider) {
-      // Generate new image using AI
-      console.log('Generating image for asset:', body.name);
+    // Check imageUrl first to avoid re-generating already saved images
+    if (body.imageUrl) {
+      // Check if this is already a saved project asset
+      const projectAssetPattern = /^\/assets\/([^/]+)\/([^/]+)\/(asset-[^.]+)\.(\w+)$/;
+      const match = body.imageUrl.match(projectAssetPattern);
 
-      const result = await generateImage({
-        prompt: body.generationPrompt,
-        aspectRatio: body.aspectRatio || '9:16',
-        provider: body.provider,
-      });
+      if (match) {
+        // This is already a saved project asset, use it directly
+        const [, urlProjectId, urlType, existingAssetId, urlFormat] = match;
 
-      imageBuffer = Buffer.from(await result.blob.arrayBuffer());
-      format = 'png';
+        console.log('✅ Using already-saved project asset:', {
+          assetId: existingAssetId,
+          projectId: urlProjectId,
+          type: urlType,
+          format: urlFormat,
+          url: body.imageUrl
+        });
+
+        // Read the existing image file to get dimensions
+        const { readFile, mkdir } = await import('fs/promises');
+        const imagePath = join(process.cwd(), 'public', body.imageUrl);
+        imageBuffer = await readFile(imagePath);
+        format = urlFormat as 'png' | 'jpg' | 'webp';
+
+        // Get image dimensions
+        const { width, height } = await getImageDimensions(imageBuffer);
+
+        // Generate thumbnail
+        const thumbnailBuffer = await generateThumbnail(imageBuffer);
+
+        // Create asset metadata using the existing asset ID and FLAT URL structure
+        // (saveAsset expects flat URLs like /assets/asset-ID.ext)
+        const asset: Asset = {
+          id: existingAssetId,
+          url: `/assets/${existingAssetId}.${format}`,
+          thumbnailUrl: `/assets/${existingAssetId}.thumb.${format}`,
+
+          type: body.type,
+          category: body.type + 's',
+
+          name: body.name,
+          description: body.description || '',
+
+          provider: body.provider || 'upload',
+          generationPrompt: body.generationPrompt,
+
+          projectId: body.projectId,
+          tags: body.tags || [],
+
+          relatedAssets: [],
+          usedInScenes: [],
+
+          version: 1,
+          parentAssetId: null,
+          editHistory: [],
+
+          format,
+          aspectRatio: body.aspectRatio || '9:16',
+          width,
+          height,
+          fileSize: imageBuffer.length,
+
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        // Use saveAsset to save both image and metadata
+        // This will write the image to the flat location (/public/assets/)
+        // The image already exists in project structure, but saveAsset will create
+        // a duplicate in flat structure - this is OK for backward compatibility
+        await saveAsset(asset, imageBuffer);
+
+        // Save thumbnail to flat location
+        const thumbnailPath = join(process.cwd(), 'public', 'assets', `${existingAssetId}.thumb.${format}`);
+        const { writeFile } = await import('fs/promises');
+        await writeFile(thumbnailPath, thumbnailBuffer);
+
+        console.log('✅ Asset saved with existing ID:', existingAssetId);
+        return NextResponse.json(asset, { status: 201 });
+      } else {
+        // Not a saved project asset, download it
+        console.log('Downloading image from URL for asset:', body.name);
+
+        // Convert relative URLs to absolute URLs for server-side fetch
+        let imageUrl = body.imageUrl;
+        if (imageUrl.startsWith('/')) {
+          const protocol = request.headers.get('x-forwarded-proto') || 'http';
+          const host = request.headers.get('host') || 'localhost:3039';
+          imageUrl = `${protocol}://${host}${imageUrl}`;
+        }
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to download image from ${imageUrl}`);
+        }
+
+        imageBuffer = Buffer.from(await response.arrayBuffer());
+
+        // Detect format from URL
+        if (body.imageUrl.endsWith('.jpg') || body.imageUrl.endsWith('.jpeg')) {
+          format = 'jpg';
+        } else if (body.imageUrl.endsWith('.webp')) {
+          format = 'webp';
+        }
+      }
     } else if (body.imageBase64) {
       // Upload from base64
       console.log('Uploading image from base64 for asset:', body.name);
@@ -210,31 +303,18 @@ export async function POST(request: NextRequest) {
       } else if (body.imageBase64.includes('image/webp')) {
         format = 'webp';
       }
-    } else if (body.imageUrl) {
-      // Download from URL
-      console.log('Downloading image from URL for asset:', body.name);
+    } else if (body.generationPrompt && body.provider) {
+      // Generate new image using AI
+      console.log('Generating image for asset:', body.name);
 
-      // Convert relative URLs to absolute URLs for server-side fetch
-      let imageUrl = body.imageUrl;
-      if (imageUrl.startsWith('/')) {
-        const protocol = request.headers.get('x-forwarded-proto') || 'http';
-        const host = request.headers.get('host') || 'localhost:3039';
-        imageUrl = `${protocol}://${host}${imageUrl}`;
-      }
+      const result = await generateImage({
+        prompt: body.generationPrompt,
+        aspectRatio: body.aspectRatio || '9:16',
+        provider: body.provider,
+      });
 
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download image from ${imageUrl}`);
-      }
-
-      imageBuffer = Buffer.from(await response.arrayBuffer());
-
-      // Detect format from URL
-      if (body.imageUrl.endsWith('.jpg') || body.imageUrl.endsWith('.jpeg')) {
-        format = 'jpg';
-      } else if (body.imageUrl.endsWith('.webp')) {
-        format = 'webp';
-      }
+      imageBuffer = Buffer.from(await result.blob.arrayBuffer());
+      format = 'png';
     } else {
       return NextResponse.json(
         { error: 'Must provide generationPrompt, imageBase64, or imageUrl' },

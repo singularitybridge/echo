@@ -6,13 +6,14 @@
 'use client';
 
 import React from 'react';
-import { ImageEditingModel } from '@/types/ai-models';
-import { getAllModels } from '@/lib/ai-models';
+import { ImageEditingModel, ImageGenerationModel } from '@/types/ai-models';
+import { getAllModels, getAllGenerationModels } from '@/lib/ai-models';
 import { Zap, Clock, Hourglass } from 'lucide-react';
 
 interface ModelSelectorProps {
-  selectedModels?: ImageEditingModel[];
-  onModelsChange?: (models: ImageEditingModel[]) => void;
+  mode?: 'editing' | 'generation';
+  selectedModels?: ImageEditingModel[] | ImageGenerationModel[];
+  onModelsChange?: (models: ImageEditingModel[] | ImageGenerationModel[]) => void;
 }
 
 // Proper Tailwind class mappings (no dynamic string interpolation)
@@ -21,6 +22,9 @@ const BORDER_COLORS = {
   blue: 'border-blue-600',
   purple: 'border-purple-600',
   pink: 'border-pink-600',
+  green: 'border-green-600',
+  cyan: 'border-cyan-600',
+  orange: 'border-orange-600',
 };
 
 const BG_COLORS = {
@@ -28,6 +32,9 @@ const BG_COLORS = {
   blue: 'bg-blue-50',
   purple: 'bg-purple-50',
   pink: 'bg-pink-50',
+  green: 'bg-green-50',
+  cyan: 'bg-cyan-50',
+  orange: 'bg-orange-50',
 };
 
 const TEXT_COLORS = {
@@ -35,19 +42,23 @@ const TEXT_COLORS = {
   blue: 'text-blue-600',
   purple: 'text-purple-600',
   pink: 'text-pink-600',
+  green: 'text-green-600',
+  cyan: 'text-cyan-600',
+  orange: 'text-orange-600',
 };
 
 export function ModelSelector({
+  mode = 'editing',
   selectedModels = [],
   onModelsChange,
 }: ModelSelectorProps) {
-  const allModels = getAllModels();
+  const allModels = mode === 'editing' ? getAllModels() : getAllGenerationModels();
 
-  const toggleModelSelection = (modelId: ImageEditingModel) => {
-    if (selectedModels.includes(modelId)) {
+  const toggleModelSelection = (modelId: ImageEditingModel | ImageGenerationModel) => {
+    if (selectedModels.includes(modelId as any)) {
       onModelsChange?.(selectedModels.filter((m) => m !== modelId));
     } else {
-      onModelsChange?.([...selectedModels, modelId]);
+      onModelsChange?.([...selectedModels, modelId] as any);
     }
   };
 
