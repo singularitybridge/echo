@@ -1506,7 +1506,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                                   e.currentTarget.click();
                                 }
                               }}
-                              className="absolute top-1 right-1 p-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer"
+                              className="absolute top-1 right-1 p-1 bg-white/90 hover:bg-white/100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer"
                               title="Edit this asset"
                             >
                               <Edit2 className="w-3 h-3 text-indigo-600" />
@@ -2016,7 +2016,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
       {/* Script Preview Modal */}
       {showScriptPreview && project && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">

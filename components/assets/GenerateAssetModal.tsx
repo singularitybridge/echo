@@ -173,7 +173,7 @@ export default function GenerateAssetModal({
   const selectedCount = variations.filter(v => v.selected).length;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -382,7 +382,7 @@ export default function GenerateAssetModal({
 
                     {/* Hover Overlay */}
                     {!variation.selected && (
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all" />
                     )}
                   </button>
                 ))}

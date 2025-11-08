@@ -25,7 +25,7 @@ export async function POST(
   try {
     const { id: assetId } = await params;
     const body = (await request.json()) as EditAssetRequest;
-    const { editPrompt } = body;
+    const { editPrompt, model } = body;
 
     if (!editPrompt || !editPrompt.trim()) {
       return NextResponse.json(
@@ -56,6 +56,7 @@ export async function POST(
       originalDescription: originalAsset.description || originalAsset.generationPrompt || originalAsset.name,
       editPrompt: editPrompt.trim(),
       aspectRatio: originalAsset.aspectRatio,
+      model, // Pass through the model parameter
     });
 
     // Convert blob to buffer

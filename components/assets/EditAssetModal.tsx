@@ -15,8 +15,13 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import type { Asset } from '@/types/asset';
+import { ImageEditingModel, ModelEditResult } from '@/types/ai-models';
+import { getModelDefinition } from '@/lib/ai-models';
+import { ModelSelector } from './ModelSelector';
 
 interface EditAssetModalProps {
   isOpen: boolean;
@@ -29,6 +34,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  results?: ModelEditResult[];
 }
 
 export default function EditAssetModal({
@@ -46,6 +52,11 @@ export default function EditAssetModal({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Multi-model state
+  const [selectedModels, setSelectedModels] = useState<ImageEditingModel[]>(['gemini-flash']);
+  const [hoveredPreview, setHoveredPreview] = useState<ModelEditResult | null>(null);
+  const [selectedResult, setSelectedResult] = useState<ImageEditingModel | null>(null);
 
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -176,6 +187,8 @@ export default function EditAssetModal({
       setChatInput('');
       setIsGenerating(false);
       setIsRegenerating(false);
+      setSelectedModels(['gemini-flash']);
+      setSelectedResult(null);
     }
   }, [isOpen]);
 
@@ -237,21 +250,42 @@ export default function EditAssetModal({
     try {
       const currentAsset = versionHistory[currentVersionIndex];
 
+      // Download the edited image as blob and convert to base64
+      const imageResponse = await fetch(currentAsset.url);
+      if (!imageResponse.ok) {
+        throw new Error('Failed to fetch edited image');
+      }
+
+      const imageBlob = await imageResponse.blob();
+
+      // Convert blob to base64
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageBlob);
+      });
+
       // Create a new asset based on the current version
       const response = await fetch(`/api/assets/${currentAsset.id}/save-as-new`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64Image,
+          metadata: currentAsset,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save as new asset');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save as new asset');
       }
 
       onEditComplete();
       onClose();
     } catch (error) {
       console.error('Failed to save as new asset:', error);
-      alert('Failed to save as new asset. Please try again.');
+      alert(`Failed to save as new asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -329,12 +363,88 @@ export default function EditAssetModal({
     }
   };
 
+  const handleSelectCompareResult = async (result: ModelEditResult) => {
+    if (!result.imageBytes || !result.mimeType) return;
+
+    setIsGenerating(true);
+
+    try {
+      const currentAsset = versionHistory[currentVersionIndex];
+
+      // Get the edit prompt from the last user message
+      const lastUserMessage = messages.filter((m) => m.role === 'user').pop();
+      const editPrompt = lastUserMessage?.content || 'Multi-model edit';
+
+      // Convert base64 to data URL
+      const imageDataUrl = `data:${result.mimeType};base64,${result.imageBytes}`;
+
+      // Create a new temporary asset object for the version history
+      // This will use a data URL temporarily until saved
+      const newAsset: Asset = {
+        ...currentAsset,
+        id: `${currentAsset.id}-temp-${Date.now()}`,
+        version: currentAsset.version + 1,
+        url: imageDataUrl, // Temporary data URL
+        parentAssetId: currentAsset.id, // Link to parent for version lineage
+        editHistory: [
+          ...currentAsset.editHistory,
+          {
+            editPrompt,
+            timestamp: new Date().toISOString(),
+            model: result.model,
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Set selected result for visual indication
+      setSelectedResult(result.model);
+
+      // Add success message
+      const successMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Selected result from ${getModelDefinition(result.model).name}. Click "Save" to update this asset or "Save as New" to create a new version.`,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, successMessage]);
+
+      // Update version history and set current index
+      setVersionHistory((prev) => {
+        const newHistory = [...prev, newAsset];
+        const newIndex = newHistory.length - 1; // Last item in new array
+
+        console.log('Version history updated:', {
+          previousLength: prev.length,
+          newLength: newHistory.length,
+          newIndex,
+          versions: newHistory.map(v => ({ id: v.id, version: v.version }))
+        });
+
+        // Set current index inside callback to use updated length
+        setCurrentVersionIndex(newIndex);
+        return newHistory;
+      });
+    } catch (error) {
+      console.error('Failed to save selected result:', error);
+
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Failed to save selected result. Please try again.',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isGenerating) return;
 
     const editPrompt = chatInput.trim();
     setChatInput('');
     setIsGenerating(true);
+    setSelectedResult(null); // Reset selection when generating new results
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -345,45 +455,71 @@ export default function EditAssetModal({
     setMessages((prev) => [...prev, userMessage]);
 
     try {
-      // Edit the current version
       const currentAsset = versionHistory[currentVersionIndex];
-      const response = await fetch(`/api/assets/${currentAsset.id}/edit`, {
+
+      // Convert current asset to data URL
+      const imageResponse = await fetch(currentAsset.url);
+      const imageBlob = await imageResponse.blob();
+      const imageDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(imageBlob);
+      });
+
+      // Determine aspect ratio from asset dimensions
+      const img = new Image();
+      const aspectRatio = await new Promise<string>((resolve) => {
+        img.onload = () => {
+          const ratio = img.width / img.height;
+          if (Math.abs(ratio - 9/16) < 0.1) resolve('9:16');
+          else if (Math.abs(ratio - 16/9) < 0.1) resolve('16:9');
+          else if (Math.abs(ratio - 1) < 0.1) resolve('1:1');
+          else if (Math.abs(ratio - 4/3) < 0.1) resolve('4:3');
+          else if (Math.abs(ratio - 3/4) < 0.1) resolve('3:4');
+          else resolve('16:9'); // Default
+        };
+        img.src = imageDataUrl;
+      });
+
+      // Call multi-model API
+      const response = await fetch('/api/edit-image-multi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ editPrompt }),
+        body: JSON.stringify({
+          models: selectedModels.length > 0 ? selectedModels : ['flux-kontext'],
+          imageDataUrl,
+          editPrompt,
+          aspectRatio,
+        }),
       });
 
       if (!response.ok) {
-        // Extract detailed error message from API response
-        let errorMessage = 'Failed to edit asset';
+        let errorMessage = 'Failed to generate with selected models';
         try {
           const errorData = await response.json();
           if (errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (e) {
-          // If JSON parsing fails, use default message
+          // Use default message
         }
         throw new Error(errorMessage);
       }
 
-      const newAsset: Asset = await response.json();
+      const data = await response.json();
 
-      // Add assistant message
+      // Add assistant message with results inline
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: `Changes applied successfully. Click "Save" to update this asset or "Save as New" to create a new version.`,
+        content: `Generated ${data.results.length} result${data.results.length > 1 ? 's' : ''}`,
         timestamp: Date.now(),
+        results: data.results,
       };
       setMessages((prev) => [...prev, assistantMessage]);
-
-      // Update version history
-      setVersionHistory((prev) => [...prev, newAsset]);
-      setCurrentVersionIndex(versionHistory.length); // Move to new version
     } catch (error) {
       console.error('Failed to edit asset:', error);
 
-      // Add error message with actual error details
+      // Add error message
       const errorMessage: ChatMessage = {
         role: 'assistant',
         content: error instanceof Error ? error.message : 'Failed to edit asset. Please try again.',
@@ -403,7 +539,7 @@ export default function EditAssetModal({
   const isAtLatestVersion = currentVersionIndex === versionHistory.length - 1;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
@@ -425,6 +561,7 @@ export default function EditAssetModal({
               onClick={handleSaveAsNew}
               disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              data-debug={JSON.stringify({ isGenerating, isRegenerating, isSaving, currentVersionIndex, historyLength: versionHistory.length })}
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Save as New
@@ -433,6 +570,7 @@ export default function EditAssetModal({
               onClick={handleSave}
               disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              data-debug={JSON.stringify({ isGenerating, isRegenerating, isSaving, currentVersionIndex, historyLength: versionHistory.length })}
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Save
@@ -461,37 +599,51 @@ export default function EditAssetModal({
                 </div>
               ) : (
                 <div className="p-2 space-y-1">
-                  {versionHistory.map((version, index) => (
-                    <button
-                      key={version.id}
-                      onClick={() => setCurrentVersionIndex(index)}
-                      disabled={isGenerating || isRegenerating}
-                      className={`w-full text-left p-2 rounded-lg transition-colors disabled:cursor-not-allowed ${
-                        index === currentVersionIndex
-                          ? 'bg-purple-100 border-2 border-purple-500'
-                          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                          index === currentVersionIndex ? 'bg-purple-600' : 'bg-gray-300'
-                        }`} />
-                        <span className={`text-xs font-medium ${
-                          index === currentVersionIndex ? 'text-purple-900' : 'text-gray-700'
-                        }`}>
-                          v{version.version}
-                        </span>
-                      </div>
-                      {index === 0 && (
-                        <span className="text-xs text-gray-500 mt-1 block ml-3.5">Original</span>
-                      )}
-                      {version.editHistory.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2 ml-3.5">
-                          {version.editHistory[version.editHistory.length - 1].editPrompt}
-                        </p>
-                      )}
-                    </button>
-                  ))}
+                  {versionHistory.map((version, index) => {
+                    const lastEdit = version.editHistory.length > 0
+                      ? version.editHistory[version.editHistory.length - 1]
+                      : null;
+                    const modelName = lastEdit?.model
+                      ? getModelDefinition(lastEdit.model).name
+                      : null;
+
+                    return (
+                      <button
+                        key={version.id}
+                        onClick={() => setCurrentVersionIndex(index)}
+                        disabled={isGenerating || isRegenerating}
+                        className={`w-full text-left p-2 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                          index === currentVersionIndex
+                            ? 'bg-purple-100 border-2 border-purple-500'
+                            : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            index === currentVersionIndex ? 'bg-purple-600' : 'bg-gray-300'
+                          }`} />
+                          <span className={`text-xs font-medium ${
+                            index === currentVersionIndex ? 'text-purple-900' : 'text-gray-700'
+                          }`}>
+                            v{version.version}
+                          </span>
+                        </div>
+                        {index === 0 && (
+                          <span className="text-xs text-gray-500 mt-1 block ml-3.5">Original</span>
+                        )}
+                        {lastEdit && (
+                          <div className="mt-1 ml-3.5 space-y-0.5">
+                            {modelName && (
+                              <p className="text-xs font-medium text-purple-600">{modelName}</p>
+                            )}
+                            <p className="text-xs text-gray-500 line-clamp-2">
+                              {lastEdit.editPrompt}
+                            </p>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -510,22 +662,34 @@ export default function EditAssetModal({
               ) : currentAsset ? (
                 <div className="relative h-full w-full flex items-center justify-center">
                   <img
-                    src={currentAsset.url}
-                    alt={currentAsset.name}
+                    src={
+                      hoveredPreview && hoveredPreview.imageBytes
+                        ? `data:${hoveredPreview.mimeType};base64,${hoveredPreview.imageBytes}`
+                        : currentAsset.url
+                    }
+                    alt={hoveredPreview ? getModelDefinition(hoveredPreview.model).name : currentAsset.name}
                     className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
                   />
 
                   {/* Version Badge Overlay */}
                   <div className="absolute top-3 left-3 flex flex-col gap-2">
-                    <div className="px-3 py-1.5 bg-black bg-opacity-70 text-white text-sm rounded-lg font-medium">
-                      v{currentAsset.version}
-                    </div>
-
-                    {/* Show edit prompt for non-original versions */}
-                    {currentAsset.version > 1 && currentAsset.editHistory.length > 0 && (
-                      <div className="px-3 py-1.5 bg-purple-600 bg-opacity-90 text-white text-xs rounded-lg max-w-xs">
-                        {currentAsset.editHistory[currentAsset.editHistory.length - 1].editPrompt}
+                    {hoveredPreview ? (
+                      <div className="px-3 py-1.5 bg-purple-600/90 text-white text-sm rounded-lg font-medium">
+                        Previewing: {getModelDefinition(hoveredPreview.model).name}
                       </div>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 bg-black/70 text-white text-sm rounded-lg font-medium">
+                          v{currentAsset.version}
+                        </div>
+
+                        {/* Show edit prompt for non-original versions */}
+                        {currentAsset.version > 1 && currentAsset.editHistory.length > 0 && (
+                          <div className="px-3 py-1.5 bg-purple-600/90 text-white text-xs rounded-lg max-w-xs">
+                            {currentAsset.editHistory[currentAsset.editHistory.length - 1].editPrompt}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -535,7 +699,7 @@ export default function EditAssetModal({
                       <button
                         onClick={handleRegenerate}
                         disabled={isGenerating || isRegenerating || isLoadingLineage || isSaving}
-                        className="p-2 bg-white bg-opacity-90 hover:bg-opacity-100 text-purple-600 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                        className="p-2 bg-white/90 hover:bg-white/100 text-purple-600 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
                         title="Generate another variation with the same prompt"
                       >
                         {isRegenerating ? (
@@ -553,29 +717,105 @@ export default function EditAssetModal({
 
           {/* Right Column: Chat Interface (35%) */}
           <div className="w-[35%] flex flex-col bg-white">
+            {/* Model Selection */}
+            <div className="border-b border-gray-200 p-4 bg-gray-50">
+              <ModelSelector
+                selectedModels={selectedModels}
+                onModelsChange={setSelectedModels}
+              />
+            </div>
+
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-lg p-3 ${
-                      message.role === 'user'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    <p
-                      className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-purple-200' : 'text-gray-500'
+                <div key={index} className="space-y-2">
+                  <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] rounded-lg p-3 ${
+                        message.role === 'user'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
                       }`}
                     >
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </p>
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p
+                        className={`text-xs mt-1 ${
+                          message.role === 'user' ? 'text-purple-200' : 'text-gray-500'
+                        }`}
+                      >
+                        {new Date(message.timestamp).toLocaleTimeString()}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Inline Results */}
+                  {message.results && message.results.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pl-2">
+                      {message.results.map((result) => {
+                        const modelDef = getModelDefinition(result.model);
+                        const isSelected = selectedResult === result.model;
+                        return (
+                          <button
+                            key={result.model}
+                            onClick={() => handleSelectCompareResult(result)}
+                            onMouseEnter={() => !result.loading && !result.error && setHoveredPreview(result)}
+                            onMouseLeave={() => setHoveredPreview(null)}
+                            disabled={result.loading || !!result.error}
+                            className={`relative rounded-lg overflow-hidden bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed group ${
+                              isSelected ? 'ring-2 ring-purple-500' : 'hover:ring-2 hover:ring-purple-400'
+                            }`}
+                          >
+                            {/* Image */}
+                            <div className="relative aspect-square bg-gray-50">
+                              {result.loading && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                  <Loader2 className="w-5 h-5 animate-spin text-gray-400 mb-1" />
+                                  <p className="text-xs text-gray-500">{modelDef.name}</p>
+                                </div>
+                              )}
+                              {result.error && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
+                                  <AlertCircle className="w-5 h-5 text-red-400 mb-1" />
+                                  <p className="text-xs text-red-500 text-center">{result.error}</p>
+                                </div>
+                              )}
+                              {!result.loading && !result.error && result.imageBytes && (
+                                <>
+                                  <img
+                                    src={`data:${result.mimeType};base64,${result.imageBytes}`}
+                                    alt={modelDef.name}
+                                    className="w-full h-full object-cover"
+                                  />
+
+                                  {/* Model Name Overlay */}
+                                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-medium text-white truncate">{modelDef.name}</span>
+                                      {result.generationTime && (
+                                        <span className="text-xs text-white/80">{result.generationTime.toFixed(1)}s</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Selected Check Icon */}
+                                  {isSelected && (
+                                    <div className="absolute top-2 right-2 bg-purple-600 rounded-full p-1">
+                                      <Check className="w-4 h-4 text-white" />
+                                    </div>
+                                  )}
+
+                                  {/* Hover Effect */}
+                                  {!isSelected && (
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
 

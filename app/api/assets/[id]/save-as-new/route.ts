@@ -20,40 +20,49 @@ export async function POST(
 ) {
   try {
     const { id: sourceAssetId } = await params;
+    const body = await request.json();
 
-    // Get the source asset (the edited version)
-    const sourceAsset = await getAsset(sourceAssetId);
+    // Get the source asset (the edited version or original)
+    // If sourceAssetId is a temp ID, it won't exist in storage
+    // In that case, we'll use the imageBase64 from request
+    let sourceAsset = await getAsset(sourceAssetId);
 
     if (!sourceAsset) {
-      return NextResponse.json(
-        { error: 'Source asset not found' },
-        { status: 404 }
-      );
+      // If no source asset found (e.g., temp ID), we need imageBase64
+      if (!body.imageBase64 || !body.metadata) {
+        return NextResponse.json(
+          { error: 'Source asset not found and no image data provided' },
+          { status: 404 }
+        );
+      }
+
+      // Use metadata from request
+      sourceAsset = body.metadata;
     }
 
     // Generate new asset ID
     const newAssetId = generateAssetId(sourceAsset.name);
 
-    // Read source image file
-    const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
-    const sourceImagePath = join(ASSETS_DIR, `${sourceAssetId}.${sourceAsset.format}`);
+    let imageBuffer: Buffer;
 
-    if (!existsSync(sourceImagePath)) {
-      return NextResponse.json(
-        { error: 'Source image file not found' },
-        { status: 404 }
-      );
-    }
+    // Check if imageBase64 was provided in request body (for temp assets)
+    if (body.imageBase64) {
+      // Decode base64 image
+      const base64Data = body.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      imageBuffer = Buffer.from(base64Data, 'base64');
+    } else {
+      // Read from existing file
+      const ASSETS_DIR = join(process.cwd(), 'public', 'assets');
+      const sourceImagePath = join(ASSETS_DIR, `${sourceAssetId}.${sourceAsset.format}`);
 
-    const imageBuffer = await readFile(sourceImagePath);
+      if (!existsSync(sourceImagePath)) {
+        return NextResponse.json(
+          { error: 'Source image file not found' },
+          { status: 404 }
+        );
+      }
 
-    // Copy thumbnail file
-    const sourceThumbnailPath = join(ASSETS_DIR, `${sourceAssetId}.thumb.${sourceAsset.format}`);
-    const newThumbnailPath = join(ASSETS_DIR, `${newAssetId}.thumb.${sourceAsset.format}`);
-
-    if (existsSync(sourceThumbnailPath)) {
-      const thumbnailBuffer = await readFile(sourceThumbnailPath);
-      await writeFile(newThumbnailPath, thumbnailBuffer);
+      imageBuffer = await readFile(sourceImagePath);
     }
 
     // Create new asset metadata (fresh root asset)
@@ -62,6 +71,7 @@ export async function POST(
       id: newAssetId,
       url: `/assets/${newAssetId}.${sourceAsset.format}`,
       thumbnailUrl: `/assets/${newAssetId}.thumb.${sourceAsset.format}`,
+      fileSize: imageBuffer.length,
 
       // Reset lineage - this is now a new root asset
       parentAssetId: null,

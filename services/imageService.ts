@@ -186,6 +186,7 @@ export interface EditImageParams {
   originalDescription?: string;
   editPrompt: string;
   aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
+  model?: string; // Optional AI model to use for editing
 }
 
 /**
@@ -257,6 +258,7 @@ async function editImageWithFal(
       imageDataUrl,
       editPrompt: params.editPrompt,
       aspectRatio: params.aspectRatio || '16:9',
+      model: params.model, // Pass through the model parameter
     }),
   });
 

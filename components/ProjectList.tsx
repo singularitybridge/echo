@@ -275,9 +275,9 @@ const ProjectList: React.FC = () => {
 
   const getProjectTypeBadge = (type: string) => {
     const colors = {
-      movie: 'bg-purple-100 text-purple-700',
-      short: 'bg-blue-100 text-blue-700',
-      commercial: 'bg-green-100 text-green-700',
+      movie: 'bg-purple-100/90 text-purple-700',
+      short: 'bg-blue-100/90 text-blue-700',
+      commercial: 'bg-green-100/90 text-green-700',
     };
     return colors[type as keyof typeof colors] || colors.movie;
   };
@@ -367,7 +367,7 @@ const ProjectList: React.FC = () => {
                         <span
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium backdrop-blur-sm ${getProjectTypeBadge(
                             project.type
-                          )} bg-opacity-90`}
+                          )}`}
                         >
                           {project.type}
                         </span>
