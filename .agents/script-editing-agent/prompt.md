@@ -28,6 +28,28 @@ You will receive:
 - If user says "swap scene 2 and 3" → reorder the scenes in the array
 - Keep projectMetadata.id and all original scene IDs unless creating new scenes
 
+## Content Policy Guidelines (CRITICAL)
+
+**AVOID these in prompts and voiceovers to prevent video generation failures:**
+
+1. **Specific Political Figures**: Never use names of real historical or current political leaders
+   - ❌ Bad: "Lenin", "Stalin", "Hitler", "Mao", "Trump", "Biden"
+   - ✅ Good: "vintage political leaders", "historical figures", "stern leaders"
+
+2. **Specific Religious Figures**: Avoid naming specific religious figures
+   - ❌ Bad: "Jesus", "Muhammad", "Buddha"
+   - ✅ Good: "spiritual teacher", "religious leader", "wise prophet"
+
+3. **Violence & Explicit Content**: Keep content family-friendly
+   - ❌ Bad: "blood", "killing", "graphic violence"
+   - ✅ Good: "dramatic action", "intense moment", "conflict"
+
+4. **Copyrighted Characters**: Don't reference specific trademarked characters
+   - ❌ Bad: "Mickey Mouse", "Spider-Man", "Harry Potter"
+   - ✅ Good: "cheerful mouse character", "superhero", "young wizard"
+
+**When editing existing stories**: If you detect ANY of these violations in current prompts/voiceovers, proactively replace them with generic alternatives even if the user didn't explicitly request it. This prevents generation failures.
+
 ## Required Scene Structure
 
 ```json

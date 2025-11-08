@@ -4,11 +4,12 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2 } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink } from 'lucide-react';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
-import { evaluateVideo, extractFrameFromVideo } from '../services/evaluationService';
+import { evaluateVideo } from '../services/evaluationService';
+import { extractFirstFrame, extractLastFrame } from '../services/frameExtractionService';
 import { CostTracker } from './CostTracker';
 import { videoStorage } from '../services/videoStorage.server';
 import { evaluationStorage } from '../services/evaluationStorage.server';
@@ -23,6 +24,9 @@ import AssetPickerModal from './assets/AssetPickerModal';
 import EditAssetModal from './assets/EditAssetModal';
 import { AssetLoader } from '../utils/assetLoader';
 import type { Asset } from '@/types/asset';
+import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-models';
+import VideoResultSelectionModal from './VideoResultSelectionModal';
+import { getAllVideoGenerationModels } from '@/lib/ai-models';
 
 interface SceneManagerProps {
   projectId: string;
@@ -35,7 +39,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [generatingSceneIds, setGeneratingSceneIds] = useState<Set<string>>(new Set());
   const [characterRefs, setCharacterRefs] = useState<GeneratedImage[]>([]);
   const [combinedRefs, setCombinedRefs] = useState<GeneratedImage[]>([]); // Assets + character refs
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    type?: string;
+    input?: string;
+    url?: string;
+  } | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [evaluatingSceneIds, setEvaluatingSceneIds] = useState<Set<string>>(new Set());
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
@@ -70,6 +79,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     resolution: Resolution.P720,
     isLooping: false,
   });
+
+  // Multi-model video generation state
+  const [selectedVideoModels, setSelectedVideoModels] = useState<VideoGenerationModel[]>(['veo-3.1']);
+  const [videoResults, setVideoResults] = useState<VideoGenerationResult[]>([]);
+  const [showVideoResultModal, setShowVideoResultModal] = useState<boolean>(false);
 
   // Load OpenAI API key from environment or localStorage
   useEffect(() => {
@@ -622,6 +636,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     setLoopEnabled(!loopEnabled);
   };
 
+  // Reload video when videoUrl changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !selectedScene?.videoUrl) return;
+
+    // Force reload the video source
+    video.load();
+  }, [selectedScene?.videoUrl]);
+
   // Handle video ended event for Play All feature
   useEffect(() => {
     const video = videoRef.current;
@@ -793,15 +816,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         startFrameDataUrl
       );
 
-      // Extract first frame from generated video for thumbnails
-      const firstFrameDataUrl = await extractFrameFromVideo(video.blob, 0);
-      console.log('Extracted first frame from generated video for thumbnail');
-
-      // Extract last frame from generated video for next scene's continuity
-      const lastFrameDataUrl = await extractFrameFromVideo(video.blob, Math.max(0, scene.duration - 0.5));
-      console.log('Extracted last frame from generated video for shot continuity');
-
-      // Save video to server for persistence and get the server URL
+      // Save video to server FIRST for persistence and get the server URL
       let serverUrl: string;
       try {
         serverUrl = await videoStorage.saveVideo(projectId, sceneId, video.blob);
@@ -810,6 +825,25 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         console.error('Failed to save video to server:', saveErr);
         // Fall back to blob URL if server save fails
         serverUrl = video.objectUrl;
+      }
+
+      // Now extract frames using server-side FFmpeg for frame-perfect extraction
+      let firstFrameDataUrl: string;
+      let lastFrameDataUrl: string;
+
+      try {
+        // Extract first frame (frame #0) using server-side FFmpeg
+        firstFrameDataUrl = await extractFirstFrame(projectId, sceneId);
+        console.log('Extracted first frame using server-side FFmpeg');
+
+        // Extract EXACT last frame using server-side FFmpeg
+        lastFrameDataUrl = await extractLastFrame(projectId, sceneId);
+        console.log('Extracted last frame using server-side FFmpeg for shot continuity');
+      } catch (frameErr) {
+        console.error('Failed to extract frames from server:', frameErr);
+        // For now, use empty data URLs as fallback
+        firstFrameDataUrl = '';
+        lastFrameDataUrl = '';
       }
 
       setProject((prevProject) => {
@@ -834,8 +868,200 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       });
     } catch (err) {
       console.error('Video generation failed:', err);
+
+      // Extract Fal.ai error details if available
+      if (err instanceof Error && (err as any).falDetails) {
+        const falDetails = (err as any).falDetails;
+        setError({
+          message: falDetails.message,
+          type: falDetails.type,
+          input: falDetails.input,
+          url: falDetails.url,
+        });
+      } else {
+        setError({
+          message: err instanceof Error ? err.message : 'Failed to generate video',
+        });
+      }
+    } finally {
+      // Remove from generating set
+      setGeneratingSceneIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sceneId);
+        return next;
+      });
+    }
+  };
+
+  /**
+   * Multi-model video generation - Generate with multiple models and let user choose
+   */
+  const handleGenerateSceneMultiModel = async (sceneId: string) => {
+    const scene = scenes.find((s) => s.id === sceneId);
+    if (!scene || selectedVideoModels.length === 0) return;
+
+    // Add to generating set
+    setGeneratingSceneIds((prev) => new Set(prev).add(sceneId));
+    setError(null);
+
+    try {
+      // Build proper prompt with dialogue syntax
+      const veoPrompt = buildVeoPrompt(scene);
+      console.log('Generated Veo prompt:', veoPrompt);
+
+      // Get previous scene's last frame for shot continuity or use selected reference
+      const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
+      let startFrameDataUrl: string | undefined;
+      let selectedRefs: GeneratedImage[] | undefined;
+
+      // Priority 1: Load attached assets (new system)
+      let assetRefs: GeneratedImage[] = [];
+      if (scene.attachedAssets && scene.attachedAssets.length > 0) {
+        console.log(`Loading ${scene.attachedAssets.length} attached assets for scene "${scene.title}"`);
+
+        // Use unified AssetLoader to load scene assets
+        const attachedAssetIds = scene.attachedAssets.map(a => a.assetId);
+        const assetReferences = await AssetLoader.loadSceneAssets(project.id, attachedAssetIds);
+
+        // Convert to full GeneratedImage format with blob data
+        for (const assetRef of assetReferences) {
+          try {
+            const response = await fetch(assetRef.objectUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              const objectUrl = URL.createObjectURL(blob);
+
+              const reader = new FileReader();
+              const base64Promise = new Promise<string>((resolve) => {
+                reader.onloadend = () => {
+                  const base64 = reader.result as string;
+                  resolve(base64.split(',')[1]);
+                };
+                reader.readAsDataURL(blob);
+              });
+
+              const imageBytes = await base64Promise;
+
+              assetRefs.push({
+                imageBytes,
+                mimeType: blob.type || 'image/png',
+                objectUrl,
+                blob,
+              });
+            }
+          } catch (err) {
+            console.log(`Failed to load asset ref: ${assetRef.objectUrl}`, err);
+          }
+        }
+
+        console.log(`Loaded ${assetRefs.length} asset references`);
+      }
+
+      // Priority 2: Use referenceMode if specified
+      if (scene.referenceMode !== undefined) {
+        if (scene.referenceMode === 'previous') {
+          // Use previous scene's last frame
+          if (sceneIndex > 0) {
+            const previousScene = scenes[sceneIndex - 1];
+            if (previousScene.lastFrameDataUrl) {
+              startFrameDataUrl = previousScene.lastFrameDataUrl;
+              console.log(`Using last frame from previous scene "${previousScene.title}" for shot continuity`);
+            }
+          }
+          selectedRefs = undefined;
+        } else {
+          // Use specific reference image (1-based index)
+          const refIndex = scene.referenceMode - 1;
+          const availableRefs = assetRefs.length > 0 ? assetRefs : characterRefs;
+
+          if (refIndex >= 0 && refIndex < availableRefs.length) {
+            selectedRefs = [availableRefs[refIndex]];
+            console.log(`Using reference ${scene.referenceMode}`);
+          } else {
+            selectedRefs = availableRefs.length > 0 ? availableRefs : undefined;
+          }
+        }
+      } else {
+        // Backward compatibility
+        if (sceneIndex > 0) {
+          const previousScene = scenes[sceneIndex - 1];
+          if (previousScene.lastFrameDataUrl) {
+            startFrameDataUrl = previousScene.lastFrameDataUrl;
+          }
+        }
+
+        const availableRefs = assetRefs.length > 0 ? assetRefs : characterRefs;
+        selectedRefs = availableRefs.length > 0 ? availableRefs : undefined;
+      }
+
+      // Prepare reference images for API call
+      const referenceImages = selectedRefs?.map(ref => ({
+        base64: ref.imageBytes,
+        mimeType: ref.mimeType,
+      }));
+
+      // Call multi-model API
+      const response = await fetch('/api/generate-video-multi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          models: selectedVideoModels,
+          prompt: veoPrompt,
+          aspectRatio: project.aspectRatio ?? '9:16',
+          resolution: currentSettings.resolution === Resolution.P1080 ? '1080p' : '720p',
+          referenceImages,
+          startFrameDataUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Multi-model generation failed');
+      }
+
+      const data = await response.json();
+      console.log(`Multi-model generation complete: ${data.results.length} results`);
+
+      // Convert base64 video data to blobs and extract thumbnails
+      const resultsWithThumbnails = await Promise.all(
+        data.results.map(async (result: VideoGenerationResult) => {
+          if (result.videoBytes && !result.error && !result.loading) {
+            try {
+              // Convert base64 to blob
+              const binaryString = atob(result.videoBytes);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              const blob = new Blob([bytes], { type: result.mimeType || 'video/mp4' });
+              const blobUrl = URL.createObjectURL(blob);
+
+              console.log(`Created blob URL for ${result.model}:`, blobUrl, 'size:', blob.size);
+
+              // Extract thumbnail from blob URL
+              const { extractFirstFrameFromBlob } = await import('@/services/frameExtractionService');
+              console.log(`Extracting thumbnail for ${result.model} from:`, blobUrl);
+              const thumbnailDataUrl = await extractFirstFrameFromBlob(blobUrl);
+              console.log(`Extracted thumbnail for ${result.model}, length:`, thumbnailDataUrl.length);
+
+              return { ...result, blob, videoUrl: blobUrl, thumbnailDataUrl };
+            } catch (err) {
+              console.error(`Failed to process video for ${result.model}:`, err);
+              return result;
+            }
+          }
+          return result;
+        })
+      );
+
+      // Store results with thumbnails and show selection modal
+      setVideoResults(resultsWithThumbnails);
+      setShowVideoResultModal(true);
+
+    } catch (err) {
+      console.error('Multi-model video generation failed:', err);
       setError(
-        err instanceof Error ? err.message : 'Failed to generate video'
+        err instanceof Error ? err.message : 'Failed to generate videos'
       );
     } finally {
       // Remove from generating set
@@ -844,6 +1070,66 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         next.delete(sceneId);
         return next;
       });
+    }
+  };
+
+  /**
+   * Handle user selecting a video result from multi-model generation
+   */
+  const handleSelectVideoResult = async (result: VideoGenerationResult) => {
+    if (!selectedSceneId || !result.blob) return;
+
+    setShowVideoResultModal(false);
+
+    try {
+      // Save selected video to server
+      const serverUrl = await videoStorage.saveVideo(projectId, selectedSceneId, result.blob);
+      console.log(`Saved selected video (${result.model}) for scene ${selectedSceneId}`);
+
+      // Extract frames
+      let firstFrameDataUrl = result.thumbnailDataUrl || '';
+      let lastFrameDataUrl = '';
+
+      try {
+        firstFrameDataUrl = await extractFirstFrame(projectId, selectedSceneId);
+        lastFrameDataUrl = await extractLastFrame(projectId, selectedSceneId);
+        console.log('Extracted frames for selected video');
+      } catch (frameErr) {
+        console.error('Failed to extract frames:', frameErr);
+      }
+
+      // Update scene with selected video
+      const sceneSettings: GenerationSettings = {
+        ...currentSettings,
+        aspectRatio: project.aspectRatio ?? AspectRatio.PORTRAIT,
+      };
+
+      setProject((prevProject) => {
+        if (!prevProject) return prevProject;
+
+        return {
+          ...prevProject,
+          scenes: prevProject.scenes.map((s) =>
+            s.id === selectedSceneId
+              ? {
+                  ...s,
+                  generated: true,
+                  videoUrl: serverUrl,
+                  settings: sceneSettings,
+                  firstFrameDataUrl,
+                  lastFrameDataUrl,
+                  evaluation: undefined,
+                }
+              : s
+          ),
+        };
+      });
+
+      // Clear results
+      setVideoResults([]);
+    } catch (err) {
+      console.error('Failed to save selected video:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save video');
     }
   };
 
@@ -861,6 +1147,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       const videoBlob = await response.blob();
 
       const evaluation = await evaluateVideo(
+        projectId,
+        sceneId,
         videoBlob,
         scene.duration,
         scene.prompt,
@@ -1245,8 +1533,37 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             {/* Video Display Area */}
             <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
               {error && (
-                <div className="bg-red-50 border border-red-300 rounded-lg p-2 max-w-md mb-2 mx-auto">
-                  <p className="text-red-700 text-sm">{error}</p>
+                <div className="bg-red-50 border border-red-300 rounded-lg p-4 max-w-2xl mb-2 mx-auto">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-red-900 font-medium mb-1">
+                        {error.type === 'content_policy_violation'
+                          ? 'Content Policy Violation'
+                          : 'Video Generation Failed'}
+                      </p>
+                      <p className="text-red-700 text-sm mb-2">{error.message}</p>
+
+                      {error.input && (
+                        <div className="mt-2 bg-red-100 rounded p-2 border border-red-200">
+                          <p className="text-red-800 text-xs font-medium mb-1">Flagged prompt:</p>
+                          <p className="text-red-700 text-xs font-mono break-words">{error.input}</p>
+                        </div>
+                      )}
+
+                      {error.url && (
+                        <a
+                          href={error.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 mt-2"
+                        >
+                          Learn more about this error
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1262,16 +1579,43 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center overflow-hidden">
-                  {selectedScene.videoUrl ? (
-                    <video
-                      ref={videoRef}
-                      key={selectedScene.videoUrl}
-                      className="max-h-full max-w-full rounded-lg shadow-2xl"
-                    >
-                      <source src={selectedScene.videoUrl} type="video/mp4" />
-                      Your browser does not support the video tag.
-                    </video>
-                  ) : (() => {
+                  {selectedScene.videoUrl ? (() => {
+                    // Get start frame preview for "continue from previous" mode
+                    const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+                    const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
+                    const isPrevious = currentRef === 'previous';
+
+                    let startFrameUrl: string | undefined;
+                    if (isPrevious && sceneIndex > 0) {
+                      const previousScene = scenes[sceneIndex - 1];
+                      startFrameUrl = previousScene.lastFrameDataUrl;
+                    }
+
+                    return (
+                      <>
+                        {/* Start frame preview - shown when not playing and available */}
+                        {startFrameUrl && !isPlaying && (
+                          <img
+                            src={startFrameUrl}
+                            alt="Start frame preview"
+                            className="max-h-full max-w-full rounded-lg shadow-2xl"
+                          />
+                        )}
+
+                        {/* Video player - hidden when showing start frame */}
+                        <video
+                          ref={videoRef}
+                          key={selectedScene.videoUrl}
+                          className={`max-h-full max-w-full rounded-lg shadow-2xl ${
+                            startFrameUrl && !isPlaying ? 'hidden' : ''
+                          }`}
+                        >
+                          <source src={selectedScene.videoUrl} type="video/mp4" />
+                          Your browser does not support the video tag.
+                        </video>
+                      </>
+                    );
+                  })() : (() => {
                     // Show start frame preview when no video exists
                     const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
                     const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
@@ -1558,15 +1902,46 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
                 <h4 className="text-sm font-medium text-gray-900">Generation Settings</h4>
 
+                {/* Multi-Model Selector */}
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Model</label>
-                  <select
-                    value={currentSettings.model}
-                    onChange={(e) => setCurrentSettings({ ...currentSettings, model: e.target.value as VeoModel })}
-                    className="w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-sm text-gray-900"
-                  >
-                    <option value={VeoModel.VEO}>Veo 3.1</option>
-                  </select>
+                  <label className="block text-xs text-gray-600 mb-2">
+                    Video Models
+                    <span className="text-gray-400 ml-1">(select one or more)</span>
+                  </label>
+                  <div className="space-y-1.5">
+                    {getAllVideoGenerationModels().map((modelDef) => (
+                      <label
+                        key={modelDef.id}
+                        className="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedVideoModels.includes(modelDef.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedVideoModels([...selectedVideoModels, modelDef.id]);
+                            } else {
+                              setSelectedVideoModels(selectedVideoModels.filter(m => m !== modelDef.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-gray-900">{modelDef.name}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              modelDef.speed === 'fast' ? 'bg-green-100 text-green-700' :
+                              modelDef.speed === 'slow' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              ~{modelDef.estimatedTimeSeconds}s
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">{modelDef.provider}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
@@ -1598,15 +1973,27 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             {/* Action Buttons */}
             <div className="space-y-2">
               <button
-                onClick={() => handleGenerateScene(selectedScene.id)}
+                onClick={() => {
+                  if (selectedVideoModels.length > 1) {
+                    handleGenerateSceneMultiModel(selectedScene.id);
+                  } else {
+                    handleGenerateScene(selectedScene.id);
+                  }
+                }}
                 disabled={
                   combinedRefs.length === 0 ||
-                  generatingSceneIds.has(selectedScene.id)
+                  generatingSceneIds.has(selectedScene.id) ||
+                  selectedVideoModels.length === 0
                 }
                 className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Play className="w-4 h-4" />
                 {selectedScene.generated ? 'Regenerate Video' : 'Generate Video'}
+                {selectedVideoModels.length > 1 && (
+                  <span className="text-xs px-1.5 py-0.5 bg-white/20 rounded">
+                    {selectedVideoModels.length} models
+                  </span>
+                )}
               </button>
 
               <button
@@ -1963,6 +2350,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       <KeyboardShortcutsModal
         isOpen={showKeyboardShortcuts}
         onClose={() => setShowKeyboardShortcuts(false)}
+      />
+
+      {/* Video Result Selection Modal */}
+      <VideoResultSelectionModal
+        isOpen={showVideoResultModal}
+        onClose={() => setShowVideoResultModal(false)}
+        results={videoResults}
+        onSelect={handleSelectVideoResult}
+        isLoading={false}
       />
 
       {/* Delete Confirmation Modal */}
