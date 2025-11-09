@@ -326,6 +326,42 @@ export const VIDEO_GENERATION_MODEL_DEFINITIONS: Record<VideoGenerationModel, Vi
     supportedAspectRatios: ['16:9', '9:16', '1:1'],
     maxDuration: 5,
   },
+  'kling-v2.5-turbo-pro': {
+    id: 'kling-v2.5-turbo-pro',
+    name: 'Kling v2.5 Turbo Pro',
+    provider: 'Kuaishou (via fal.ai)',
+    icon: 'video',
+    speed: 'medium',
+    description:
+      'High-quality video generation with balanced speed and quality. Excellent for creating dynamic, cinematic videos with strong motion.',
+    useCases: [
+      'Dynamic video content',
+      'Cinematic motion sequences',
+      'Balanced quality/speed workflows',
+    ],
+    estimatedTimeSeconds: 60, // ~1 minute
+    colorAccent: 'purple',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    maxDuration: 5,
+  },
+  'sora-turbo': {
+    id: 'sora-turbo',
+    name: 'Sora Turbo',
+    provider: 'OpenAI',
+    icon: 'film',
+    speed: 'fast',
+    description:
+      'OpenAI\'s fast video generation model with strong text-to-video and image-to-video capabilities. Optimized for quick turnaround.',
+    useCases: [
+      'Quick video generation from text',
+      'Image-to-video animation',
+      'Rapid prototyping and iteration',
+    ],
+    estimatedTimeSeconds: 45, // ~45 seconds
+    colorAccent: 'green',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    maxDuration: 5,
+  },
 };
 
 /**

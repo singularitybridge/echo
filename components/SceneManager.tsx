@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp } from 'lucide-react';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
@@ -49,6 +49,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [evaluatingSceneIds, setEvaluatingSceneIds] = useState<Set<string>>(new Set());
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
+  const [evaluationExpanded, setEvaluationExpanded] = useState<boolean>(true);
   const [showRefsModal, setShowRefsModal] = useState<boolean>(false);
   const [showRefSelectModal, setShowRefSelectModal] = useState<boolean>(false);
   const [showProjectSettings, setShowProjectSettings] = useState<boolean>(false);
@@ -1701,32 +1702,72 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           <div className="p-4 space-y-4">
             {/* Scene Info */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {selectedScene.title}
-              </h3>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700">
-                  {selectedScene.cameraAngle}
-                </span>
-                <div className="text-xs text-gray-600 flex items-center gap-1">
-                  <Film className="w-3 h-3" />
-                  {selectedScene.duration}s
+              {/* Scene Title with Action Buttons */}
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex-1">
+                  {selectedScene.title}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {/* Generate Video Button - Icon Only, color indicates status */}
+                  <button
+                    onClick={() => {
+                      if (selectedVideoModels.length > 1) {
+                        handleGenerateSceneMultiModel(selectedScene.id);
+                      } else {
+                        handleGenerateScene(selectedScene.id);
+                      }
+                    }}
+                    disabled={
+                      combinedRefs.length === 0 ||
+                      generatingSceneIds.has(selectedScene.id) ||
+                      selectedVideoModels.length === 0
+                    }
+                    className={`p-1 transition-colors flex items-center justify-center flex-shrink-0 ${
+                      selectedScene.generated
+                        ? 'text-green-600 hover:text-green-700'
+                        : 'text-orange-500 hover:text-orange-600'
+                    } disabled:text-gray-300 disabled:cursor-not-allowed`}
+                    title={selectedScene.generated ? 'Regenerate Video' : 'Generate Video'}
+                  >
+                    <Play className="w-5 h-5" fill="currentColor" />
+                  </button>
+
+                  {/* Settings Button - Icon Only */}
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="p-1 text-gray-600 hover:text-gray-900 transition-colors flex items-center justify-center flex-shrink-0"
+                    title="Show Settings"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+
+                  {/* Evaluate Button - Icon Only */}
+                  <button
+                    onClick={() => handleEvaluateScene(selectedScene.id)}
+                    disabled={!selectedScene.videoUrl || evaluatingSceneIds.has(selectedScene.id)}
+                    className="p-1 text-purple-600 hover:text-purple-700 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+                    title="Evaluate Video"
+                  >
+                    {evaluatingSceneIds.has(selectedScene.id) ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Search className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 
-              {/* Status Badges */}
-              <div className="flex items-center gap-2 mb-3">
-                {selectedScene.generated ? (
-                  <span className="px-2 py-1 bg-green-50 border border-green-200 rounded text-green-700 text-xs flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Generated
-                  </span>
-                ) : (
-                  <span className="px-2 py-1 bg-gray-100 rounded text-gray-600 text-xs">
-                    Not generated
-                  </span>
-                )}
-                {selectedScene.evaluation && (
+              {/* Duration */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2 text-sm text-gray-900">
+                  <Film className="w-4 h-4 text-indigo-600" />
+                  <span>{selectedScene.duration}s</span>
+                </div>
+              </div>
+
+              {/* Evaluation Score Badge */}
+              {selectedScene.evaluation && (
+                <div className="mb-3">
                   <span className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
                     selectedScene.evaluation.overallScore >= 70
                       ? 'bg-green-50 border border-green-200 text-green-700'
@@ -1735,16 +1776,24 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       : 'bg-red-50 border border-red-200 text-red-700'
                   }`}>
                     <Search className="w-3 h-3" />
-                    {selectedScene.evaluation.overallScore}%
+                    Score: {selectedScene.evaluation.overallScore}%
                   </span>
-                )}
+                </div>
+              )}
+
+              {/* Camera Angle */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2 text-sm text-gray-900">
+                  <Camera className="w-4 h-4 text-indigo-600" />
+                  <span>{selectedScene.cameraAngle}</span>
+                </div>
               </div>
 
               {/* Prompt */}
               <div className="mb-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Prompt</label>
-                <div className="flex items-start gap-2">
-                  <p className="text-sm text-gray-600 flex-1 bg-gray-50 rounded-lg p-2">{selectedScene.prompt}</p>
+                <div className="flex items-start gap-2 text-sm text-gray-900">
+                  <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                  <p className="flex-1">{selectedScene.prompt}</p>
                   <button
                     onClick={handleCopyPrompt}
                     className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
@@ -1762,10 +1811,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               {/* Voiceover */}
               {selectedScene.voiceover && (
                 <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Voiceover</label>
-                  <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-200 rounded-lg p-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-indigo-900 italic">&ldquo;{selectedScene.voiceover}&rdquo;</p>
+                  <div className="flex items-start gap-2 text-sm text-gray-900">
+                    <Mic className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <p className="flex-1 italic">&ldquo;{selectedScene.voiceover}&rdquo;</p>
                   </div>
                 </div>
               )}
@@ -1886,17 +1934,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
             </div>
 
-            {/* Settings Toggle */}
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                showSettings ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              {showSettings ? 'Hide Settings' : 'Show Settings'}
-            </button>
-
             {/* Settings Panel */}
             {showSettings && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
@@ -1970,51 +2007,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  if (selectedVideoModels.length > 1) {
-                    handleGenerateSceneMultiModel(selectedScene.id);
-                  } else {
-                    handleGenerateScene(selectedScene.id);
-                  }
-                }}
-                disabled={
-                  combinedRefs.length === 0 ||
-                  generatingSceneIds.has(selectedScene.id) ||
-                  selectedVideoModels.length === 0
-                }
-                className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                {selectedScene.generated ? 'Regenerate Video' : 'Generate Video'}
-                {selectedVideoModels.length > 1 && (
-                  <span className="text-xs px-1.5 py-0.5 bg-white/20 rounded">
-                    {selectedVideoModels.length} models
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => handleEvaluateScene(selectedScene.id)}
-                disabled={!selectedScene.videoUrl || evaluatingSceneIds.has(selectedScene.id)}
-                className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {evaluatingSceneIds.has(selectedScene.id) ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Evaluating...
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-4 h-4" />
-                    Evaluate Video
-                  </>
-                )}
-              </button>
-            </div>
-
             {/* OpenAI API Key Input */}
             {!openaiApiKey && selectedScene.generated && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
@@ -2034,28 +2026,38 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             {/* Evaluation Results */}
             {selectedScene.evaluation && (
               <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <button
+                  onClick={() => setEvaluationExpanded(!evaluationExpanded)}
+                  className="w-full text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 hover:text-indigo-600 transition-colors"
+                >
                   <Search className="w-4 h-4" />
                   Evaluation Results
-                </h4>
+                  {evaluationExpanded ? (
+                    <ChevronUp className="w-4 h-4 ml-auto" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 ml-auto" />
+                  )}
+                </button>
 
-                {/* Overall Score */}
-                <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">Overall Score</span>
-                    <span className={`text-xl font-bold ${
-                      selectedScene.evaluation.overallScore >= 70
-                        ? 'text-green-600'
-                        : selectedScene.evaluation.overallScore >= 40
-                        ? 'text-yellow-600'
-                        : 'text-red-600'
-                    }`}>
-                      {selectedScene.evaluation.overallScore}%
-                    </span>
-                  </div>
-                </div>
+                {evaluationExpanded && (
+                  <>
+                    {/* Overall Score */}
+                    <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Overall Score</span>
+                        <span className={`text-xl font-bold ${
+                          selectedScene.evaluation.overallScore >= 70
+                            ? 'text-green-600'
+                            : selectedScene.evaluation.overallScore >= 40
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
+                        }`}>
+                          {selectedScene.evaluation.overallScore}%
+                        </span>
+                      </div>
+                    </div>
 
-                {/* Audio Score */}
+                    {/* Audio Score */}
                 <div className="mb-3 p-3 bg-gray-50 rounded-lg">
                   <h5 className="text-xs font-medium text-gray-900 mb-2 flex items-center gap-2">
                     <MessageSquare className="w-3 h-3" />
@@ -2103,6 +2105,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     </p>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             )}
           </div>

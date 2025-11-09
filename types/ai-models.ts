@@ -29,7 +29,9 @@ export type ImageGenerationModel =
  */
 export type VideoGenerationModel =
   | 'veo-3.1'
-  | 'wan-2.5-i2v';
+  | 'wan-2.5-i2v'
+  | 'kling-v2.5-turbo-pro'
+  | 'sora-turbo';
 
 /**
  * Model speed classification
