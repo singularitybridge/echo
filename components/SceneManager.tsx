@@ -61,11 +61,20 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [showEditAssetModal, setShowEditAssetModal] = useState<boolean>(false);
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
 
-  // Chat state for script editing
+  // Right panel view toggle
+  const [rightPanelView, setRightPanelView] = useState<'details' | 'chat'>('details');
+
+  // Chat state for script editing (story-level)
   const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; timestamp: number}>>([]);
   const [chatInput, setChatInput] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Chat state for shot editing (scene-level)
+  const [shotMessages, setShotMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; timestamp: number}>>([]);
+  const [shotChatInput, setShotChatInput] = useState('');
+  const [isEditingShot, setIsEditingShot] = useState(false);
+  const shotChatEndRef = useRef<HTMLDivElement>(null);
 
   // Playback controls
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState<boolean>(false);
@@ -99,10 +108,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     }
   }, []);
 
-  // Auto-scroll chat to latest message
+  // Auto-scroll chat to latest message (story-level)
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({behavior: 'smooth'});
   }, [messages]);
+
+  // Auto-scroll shot chat to latest message (scene-level)
+  useEffect(() => {
+    shotChatEndRef.current?.scrollIntoView({behavior: 'smooth'});
+  }, [shotMessages]);
 
   // Edit story using simple POST request (same as CreateStoryModal)
   const editStory = async (editRequest: string) => {
@@ -190,6 +204,103 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       ]);
     } finally {
       setIsRefining(false);
+    }
+  };
+
+  // Edit shot (scene-level editing) using AI agent
+  const editShot = async (editRequest: string) => {
+    if (!project || !selectedSceneId) return;
+
+    const selectedScene = scenes.find(s => s.id === selectedSceneId);
+    if (!selectedScene) return;
+
+    setIsEditingShot(true);
+
+    // Add user message to shot chat
+    setShotMessages(prev => [...prev, {role: 'user', content: editRequest, timestamp: Date.now()}]);
+
+    try {
+      // Prepare shot editing request with current shot details
+      const shotEditRequest = {
+        storyDraft: {
+          projectMetadata: {
+            id: project.id,
+            title: project.title,
+            description: project.description,
+            type: project.type,
+            character: project.character,
+          },
+          config: {
+            aspectRatio: project.aspectRatio,
+            defaultModel: project.defaultModel,
+            defaultResolution: project.defaultResolution,
+          },
+          scenes: project.scenes,
+        },
+        currentShot: {
+          id: selectedScene.id,
+          title: selectedScene.title,
+          duration: selectedScene.duration,
+          prompt: selectedScene.prompt,
+          cameraAngle: selectedScene.cameraAngle,
+          voiceover: selectedScene.voiceover,
+        },
+        editRequest,
+      };
+
+      const response = await fetch('/api/story/edit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(shotEditRequest),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Shot edit failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Update project with edited scene
+      const updatedProject = {
+        ...project,
+        scenes: result.updatedStory.scenes,
+      };
+
+      setProject(updatedProject);
+
+      // Save to server
+      await projectStorage.saveProject(updatedProject);
+
+      // Add assistant response to shot chat
+      setShotMessages(prev => [...prev, {role: 'assistant', content: result.response, timestamp: Date.now()}]);
+
+      console.log('[SceneManager] Shot edit successful:', result.changesSummary);
+    } catch (error) {
+      console.error('[SceneManager] Shot edit error:', error);
+
+      // Provide error message
+      let errorMessage = 'Sorry, I encountered an error while editing the shot. Please try again.';
+
+      if (error instanceof Error) {
+        if (error.message.includes('429') || error.message.includes('quota') || error.message.includes('Too Many Requests')) {
+          errorMessage = 'The AI service is currently experiencing high demand. Please wait a moment and try again.';
+        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+          errorMessage = 'The editing service encountered an error. Please try again in a moment.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'The request took too long. Please try a simpler edit or try again.';
+        }
+      }
+
+      setShotMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: errorMessage,
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsEditingShot(false);
     }
   };
 
@@ -1419,7 +1530,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
 
       {/* Main Content Area - 3 Columns */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden pb-20">
         {/* Left Panel - Scenes List (1/4) */}
         <div className="w-1/4 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
 
@@ -1695,18 +1806,40 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
 
       {/* Right Column - Scene Controls (1/4) */}
-      <div className="w-1/4 bg-white border-l border-gray-200 overflow-y-auto flex-shrink-0">
+      <div className={`w-1/4 bg-white border-l border-gray-200 flex-shrink-0 ${rightPanelView === 'details' ? 'overflow-y-auto' : 'flex flex-col'}`}>
         {selectedScene && (() => {
           const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
           return (
-          <div className="p-4 space-y-4">
+          <div className={rightPanelView === 'details' ? 'p-4 space-y-4' : 'flex flex-col flex-1 min-h-0'}>
             {/* Scene Info */}
-            <div>
-              {/* Scene Title with Action Buttons */}
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex-1">
-                  {selectedScene.title}
-                </h3>
+            <div className={rightPanelView === 'chat' ? 'flex flex-col flex-1 min-h-0' : ''}>
+              {/* View Toggle and Action Buttons */}
+              <div className={`flex items-center justify-between gap-3 mb-4 ${rightPanelView === 'chat' ? 'p-4 pb-0 flex-shrink-0' : ''}`}>
+                {/* View Toggle */}
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setRightPanelView('details')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      rightPanelView === 'details'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={() => setRightPanelView('chat')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      rightPanelView === 'chat'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <MessageSquare className="w-3 h-3 inline mr-1" />
+                    Chat
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2">
                   {/* Generate Video Button - Icon Only, color indicates status */}
                   <button
@@ -1757,6 +1890,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 </div>
               </div>
 
+              {/* Conditional View: Details or Chat */}
+              {rightPanelView === 'details' ? (
+                <>
               {/* Duration */}
               <div className="mb-3">
                 <div className="flex items-center gap-2 text-sm text-gray-900">
@@ -1915,8 +2051,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   })()}
                 </button>
               </div>
-
-            </div>
 
             {/* Settings Panel */}
             {showSettings && (
@@ -2107,6 +2241,162 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 )}
               </div>
             )}
+            </>
+              ) : (
+                /* Chat View for Shot Editing */
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* Shot Details - Same styling as Details mode */}
+                  <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                    {/* Duration */}
+                    <div className="mb-3">
+                      <div className="flex items-center gap-2 text-sm text-gray-900">
+                        <Film className="w-4 h-4 text-indigo-600" />
+                        <span>{selectedScene.duration}s</span>
+                      </div>
+                    </div>
+
+                    {/* Camera Angle */}
+                    <div className="mb-3">
+                      <div className="flex items-center gap-2 text-sm text-gray-900">
+                        <Camera className="w-4 h-4 text-indigo-600" />
+                        <span>{selectedScene.cameraAngle}</span>
+                      </div>
+                    </div>
+
+                    {/* Prompt */}
+                    <div className="mb-3">
+                      <div className="flex items-start gap-2 text-sm text-gray-900">
+                        <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                        <p className="flex-1">{selectedScene.prompt}</p>
+                        <button
+                          onClick={handleCopyPrompt}
+                          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
+                          title="Copy full prompt"
+                        >
+                          {copiedPrompt ? (
+                            <Check className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Voiceover */}
+                    {selectedScene.voiceover && (
+                      <div className="mb-3">
+                        <div className="flex items-start gap-2 text-sm text-gray-900">
+                          <Mic className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                          <p className="flex-1 italic">&ldquo;{selectedScene.voiceover}&rdquo;</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chat Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {shotMessages.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Edit3 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-sm text-gray-500">
+                          Start a conversation to edit this shot
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          e.g., "Change the camera angle to close-up" or "Make the narration more dramatic"
+                        </p>
+                      </div>
+                    ) : (
+                      shotMessages.map((message) => (
+                        <div
+                          key={message.timestamp}
+                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className="space-y-2 max-w-[85%]">
+                            {message.content && (
+                              <div
+                                className={`rounded-lg px-4 py-2.5 ${
+                                  message.role === 'user'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white border border-gray-200 text-gray-900'
+                                }`}
+                              >
+                                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                <p
+                                  className={`text-xs mt-1 ${
+                                    message.role === 'user' ? 'text-indigo-200' : 'text-gray-400'
+                                  }`}
+                                >
+                                  {new Date(message.timestamp).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {/* Loading indicator */}
+                    {isEditingShot && (
+                      <div className="flex justify-start">
+                        <div className="bg-white border border-gray-200 rounded-lg px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                            <p className="text-sm text-gray-600">Updating shot...</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Scroll anchor */}
+                    <div ref={shotChatEndRef} />
+                  </div>
+
+                  {/* Chat Input */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (shotChatInput.trim() && !isEditingShot) {
+                        editShot(shotChatInput);
+                        setShotChatInput('');
+                      }
+                    }}
+                    className="p-4 border-t border-gray-200 bg-white flex-shrink-0"
+                  >
+                    <div className="flex gap-2">
+                      <textarea
+                        value={shotChatInput}
+                        onChange={(e) => setShotChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            if (shotChatInput.trim() && !isEditingShot) {
+                              editShot(shotChatInput);
+                              setShotChatInput('');
+                            }
+                          }
+                        }}
+                        rows={2}
+                        placeholder="Type your message... (Cmd+Enter to send)"
+                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        disabled={isEditingShot}
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={!shotChatInput.trim() || isEditingShot}
+                        className="px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        title="Send message (Cmd+Enter)"
+                      >
+                        <Edit3 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
           </div>
           );
         })()}

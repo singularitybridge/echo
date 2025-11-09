@@ -39,9 +39,10 @@ Common feedback types and how to handle them:
    - "Make them more relatable" → Add vulnerability, human moments
 
 5. **Visual Changes**
-   - "Better visuals" → More specific, cinematic descriptions
+   - "Better visuals" → More specific ACTION descriptions (not character appearance)
    - "Different setting" → Change locations while maintaining story coherence
    - "More action" → Add movement, dynamic camera work
+   - **Note**: Visual prompts should describe ACTIONS and LOCATIONS, never character appearance
 
 ### Refinement Process
 
@@ -55,13 +56,14 @@ Common feedback types and how to handle them:
    - 9:16 portrait format optimized
    - Clear story arc with satisfying ending
 
-### Character Consistency Rules
+### Character Consistency Rules (Veo 3.1 Optimization)
 
-**CRITICAL**: When refining, maintain character visual consistency unless explicitly asked to change the character:
-- Same physical appearance across all scenes
-- Consistent clothing (unless story requires costume change)
-- Same character reference description
-- Visual details match the original
+**CRITICAL**: Maintain character IDENTITY but DON'T describe appearance in visual prompts:
+- Refer to the same character role/identity across all scenes (e.g., "A woman", "The barista")
+- **DO NOT** describe physical appearance, clothing, hair, or features in scene prompts
+- Character reference images (generated separately) handle all visual appearance
+- Focus prompts on what the character DOES, not how they LOOK
+- Example: ✅ "A woman walks through a park" NOT ❌ "A woman with long brown hair in a blue dress walks through a park"
 
 ### Scene Interdependencies
 
@@ -130,22 +132,30 @@ Return complete refined story with:
 4. Character description maintained (unless explicitly changed)
 5. All technical constraints met (timing, format, etc.)
 
-## Quality Checks
+## Quality Checks (Veo 3.1 Compliance)
 
 Before returning refined story:
 - ✓ Story still has clear beginning, middle, end
-- ✓ Character visuals are consistent
-- ✓ Each scene is 8 seconds (12-25 words)
+- ✓ Character identity is consistent (same role/character across scenes)
+- ✓ **NO character appearance descriptions** in visual prompts (no clothing, hair, features)
+- ✓ Visual prompts focus on ACTIONS and LOCATIONS only
+- ✓ Each scene is 8 seconds (12-25 words dialogue)
+- ✓ Dialogue uses required format: `[Character] says, "text" (no subtitles)`
 - ✓ Camera angles are specific and varied
-- ✓ Visual descriptions are detailed and cinematic
+- ✓ Visual descriptions are action-focused and concise (15-40 words)
+- ✓ One clear idea per scene
 - ✓ Dialogue feels natural
 - ✓ User's feedback is addressed
 - ✓ Story maintains coherence
 
-## Important Notes
+## Important Notes (Veo 3.1 Optimization)
 
 - **Preserve character identity** unless explicitly asked to change
+- **NEVER describe character appearance** in visual prompts - reference images handle this
+- **Visual prompts = ACTION only** - what character does, where they are, camera angle
 - **Maintain story structure** - keep 4-scene format
 - **Be surgical** - only change what needs changing
+- **Required dialogue format** - `[Character] says, "text" (no subtitles)`
 - **Test coherence** - story should still flow naturally
 - **Honor user intent** - understand what they're really asking for
+- **One idea per scene** - avoid multiple actions in 8-second clips

@@ -44,14 +44,15 @@ FADE OUT.
    - Scene 4: Resolution/Payoff
 
 3. **Each Scene Must Include**:
-   - **Visual Prompt**: Detailed description for AI video generation (what appears on screen)
+   - **Visual Prompt**: Action-focused description for AI video generation (what the character DOES, not how they LOOK)
    - **Voiceover/Dialogue**: 12-25 words that fit in 8 seconds
    - **Camera Angle**: Specific shot type (Medium shot, Close-up, Wide shot, Overhead, etc.)
 
-4. **Character Consistency**:
-   - Describe the main character's appearance in detail in Scene 1
-   - Reference the same character consistently across all scenes
-   - Provide enough visual detail for character reference generation
+4. **Character Consistency** (CRITICAL - Veo 3.1 Optimization):
+   - **DO NOT** describe character appearance in scene prompts (no clothing, hair, facial features)
+   - Reference images will be provided separately showing character appearance
+   - Focus prompts on CHARACTER ACTIONS and LOCATIONS only
+   - Example: ✅ "A woman walks through a park" NOT ❌ "A woman with long brown hair wearing a blue dress walks through a park"
 
 5. **Story Title**: Creative, engaging title (3-6 words)
 6. **Story Description**: One-sentence logline (15-25 words)
@@ -64,7 +65,7 @@ FADE OUT.
   "title": "Story Title",
   "description": "One-sentence story description",
   "tags": ["tag1", "tag2"],
-  "character": "Detailed character description for consistency",
+  "character": "Basic character identity (role, age range, gender) - NO appearance details",
   "screenplay": "Full screenplay in traditional format",
   "scenes": [
     {
@@ -83,17 +84,26 @@ FADE OUT.
 
 ## Guidelines
 
-### Visual Prompts
-- Be specific about lighting, setting, character appearance, actions
-- Focus on what can be seen on screen
-- Use cinematic language
-- Optimize for portrait 9:16 format (vertical composition)
+### Visual Prompts (Veo 3.1 Optimized for Image-to-Video)
+- **NEVER describe character appearance** (clothing, hair, features) - reference images provide this
+- **Focus on ACTION and LOCATION**: What the character DOES and WHERE they are
+- **Be specific about**: setting, lighting, mood, camera movement
+- **Structure**: Subject (minimal) + Context (location) + Action + Camera angle
+- **Keep concise**: 15-40 words per prompt
+- **One idea per scene**: Single clear action or moment
+- **Optimize for 9:16 vertical format**: Consider portrait composition
+- **Example**: ✅ "A woman walks along a beach at sunset, waves crashing nearby. Medium shot"
+- **NOT**: ❌ "A woman with flowing brown hair in a white sundress walks along a beach"
 
-### Voiceover/Dialogue
-- Keep to 12-25 words for 8-second scenes
+### Voiceover/Dialogue (Required Format)
+- **Format**: `[Character] says, "dialogue text" (no subtitles)`
+- **Length**: 12-25 words for 8-second scenes
+- **Always use quotation marks** around dialogue
+- **Always end with** "(no subtitles)"
 - Natural, conversational tone
 - Advances the story
 - Emotionally resonant
+- **Example**: ✅ `A woman says, "Sometimes the best discoveries happen when we stop searching" (no subtitles)`
 
 ### Camera Angles
 - Vary shots for visual interest
@@ -154,9 +164,15 @@ When user provides feedback for refinement:
   "title": "The Last Letter",
   "description": "A woman discovers an old letter that changes how she sees her past",
   "tags": ["Emotional", "Reflective", "Character-driven"],
-  "character": "A woman in her 60s with silver hair, wearing a cardigan, gentle expressions",
+  "character": "A woman in her 60s",
   "screenplay": "...",
-  "scenes": [...]
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "visualPrompt": "A woman sits at a desk, opening an old drawer. Dust particles float in window light. Medium shot",
+      "voiceover": "A woman says, \"Some memories we keep locked away for a reason\" (no subtitles)"
+    }
+  ]
 }
 ```
 
@@ -164,15 +180,25 @@ When user provides feedback for refinement:
 
 Input:
 - What happens: "A barista discovers their coffee has the power to make people tell the truth"
-- Who: "Young barista with colorful tattoos and a mischievous smile"
+- Who: "Young barista"
 - Mood: "Light, playful, with a touch of chaos"
 
-Generated story with 4 scenes showing setup, first truth, chaos spreading, resolution.
+Generated story with 4 scenes:
+- Scene 1: Barista prepares coffee in a cozy café. Medium shot
+- Scene 2: Customer takes a sip and blurts out an unexpected truth. Close-up
+- Scene 3: Multiple customers sharing secrets, café in chaos. Wide shot
+- Scene 4: Barista pours the truth coffee down the drain. Close-up of hands
 
-## Important Notes
+**Note**: NO character appearance details in visual prompts - reference images will show how the barista looks.
 
-- **Always maintain character visual consistency** across all 4 scenes
-- **Optimize for 9:16 portrait** - mention vertical composition
+## Important Notes (Veo 3.1 Optimization)
+
+- **Character identity consistency** - refer to the same character across scenes but DON'T describe appearance
+- **Reference images handle visuals** - separate character reference images will be generated showing appearance
+- **Visual prompts = ACTION only** - focus on what character does, where they are, camera angle
+- **Optimize for 9:16 portrait** - vertical composition, close-ups work well
 - **Keep within time limits** - 8 seconds per scene = 12-25 words dialogue
-- **Create visual stories** - what viewers SEE is as important as dialogue
+- **Dialogue format is required** - `[Character] says, "text" (no subtitles)`
+- **Create visual stories** - what viewers SEE happening is as important as dialogue
 - **End with satisfaction** - scene 4 should provide emotional payoff
+- **One idea per scene** - single clear action, avoid multiple actions in one 8-second clip
