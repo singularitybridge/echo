@@ -1941,10 +1941,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               {/* Reference Selection */}
               <div className="mb-3">
                 <label className="block text-xs font-medium text-gray-700 mb-2">Start Frame</label>
-                <button
-                  onClick={() => setShowRefSelectModal(true)}
-                  className="w-full bg-white border-2 border-gray-200 hover:border-indigo-300 rounded-lg p-3 transition-all group text-left"
-                >
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-3">
                   {(() => {
                     const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
                     const isPrevious = currentRef === 'previous';
@@ -1964,33 +1961,62 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     }
 
                     return (
-                      <div className="flex items-center gap-2">
-                        {/* Thumbnail */}
-                        <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200 relative group/thumb">
-                          {imageUrl ? (
-                            <img
-                              src={imageUrl}
-                              alt="Start frame"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : isPrevious ? (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
-                              <Film size={24} className="text-indigo-400" />
+                      <div className="space-y-3">
+                        {/* Thumbnail and Info */}
+                        <div className="flex items-center gap-3">
+                          {/* Thumbnail */}
+                          <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200">
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt="Start frame"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : isPrevious ? (
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
+                                <Film size={24} className="text-indigo-400" />
+                              </div>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                <ImageIcon size={24} className="text-gray-300" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Label */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {isPrevious ? (
+                                <>
+                                  <Film size={16} className="text-indigo-600 flex-shrink-0" />
+                                  <span className="text-sm font-medium text-gray-900">Previous Shot</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ImageIcon size={16} className="text-indigo-600 flex-shrink-0" />
+                                  <span className="text-sm font-medium text-gray-900">Asset {currentRef}</span>
+                                </>
+                              )}
                             </div>
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                              <ImageIcon size={24} className="text-gray-300" />
-                            </div>
-                          )}
+                          </div>
                         </div>
 
-                        {/* Edit button - only show for asset references */}
-                        {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
                           <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const refIndex = currentRef - 1;
-                              const selectedRef = combinedRefs[refIndex];
+                            onClick={() => setShowRefSelectModal(true)}
+                            className="flex-1 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
+                          >
+                            <ImagePlus size={14} />
+                            <span>Change</span>
+                          </button>
+
+                          {/* Edit button - only show for asset references */}
+                          {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
+                            <button
+                              onClick={async () => {
+                                const refIndex = currentRef - 1;
+                                const selectedRef = combinedRefs[refIndex];
 
                               console.log('🎨 [Edit Start Frame] Starting edit for reference:', {
                                 refIndex,
@@ -2075,38 +2101,19 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                                 console.error('❌ Failed to load asset:', error);
                                 alert('Failed to load asset for editing. Please try again.');
                               }
-                            }}
-                            className="p-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors flex-shrink-0"
-                            title="Edit this asset with AI"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Label and Change Hint */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            {isPrevious ? (
-                              <>
-                                <Film size={16} className="text-indigo-600 flex-shrink-0" />
-                                <span className="text-sm font-medium text-gray-900">Previous Shot</span>
-                              </>
-                            ) : (
-                              <>
-                                <ImageIcon size={16} className="text-indigo-600 flex-shrink-0" />
-                                <span className="text-sm font-medium text-gray-900">Asset {currentRef}</span>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500 group-hover:text-indigo-600 transition-colors">
-                            <ImagePlus size={12} />
-                            <span>Click to change</span>
-                          </div>
+                              }}
+                              className="flex-1 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
+                              title="Edit this asset with AI"
+                            >
+                              <Edit2 size={14} />
+                              <span>Edit</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
                   })()}
-                </button>
+                </div>
               </div>
 
             {/* Settings Panel */}
