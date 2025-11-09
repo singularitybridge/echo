@@ -1964,8 +1964,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     }
 
                     return (
-                      <div className="flex items-center gap-3">
-                        {/* Thumbnail with hover edit button */}
+                      <div className="flex items-center gap-2">
+                        {/* Thumbnail */}
                         <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200 relative group/thumb">
                           {imageUrl ? (
                             <img
@@ -1982,49 +1982,106 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                               <ImageIcon size={24} className="text-gray-300" />
                             </div>
                           )}
-
-                          {/* Edit button overlay - only show for asset references */}
-                          {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Find the asset from AssetLoader
-                                const refIndex = currentRef - 1;
-                                const refImage = combinedRefs[refIndex];
-
-                                // Get the asset from the project's asset attachments
-                                // We need to fetch the actual Asset object from the API
-                                fetch(`/api/assets?projectId=${projectId}`)
-                                  .then(res => res.json())
-                                  .then(data => {
-                                    // Find the asset that matches this reference URL
-                                    const asset = data.assets?.find((a: Asset) =>
-                                      a.url === refImage.objectUrl ||
-                                      refImage.objectUrl.includes(a.id)
-                                    );
-                                    if (asset) {
-                                      setAssetToEdit(asset);
-                                      setShowEditAssetModal(true);
-                                    }
-                                  })
-                                  .catch(err => console.error('Failed to load asset:', err));
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  e.currentTarget.click();
-                                }
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-white/90 hover:bg-white/100 rounded-full shadow-lg opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer"
-                              title="Edit this asset"
-                            >
-                              <Edit2 className="w-3 h-3 text-indigo-600" />
-                            </div>
-                          )}
                         </div>
+
+                        {/* Edit button - only show for asset references */}
+                        {!isPrevious && typeof currentRef === 'number' && combinedRefs[currentRef - 1] && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const refIndex = currentRef - 1;
+                              const selectedRef = combinedRefs[refIndex];
+
+                              console.log('🎨 [Edit Start Frame] Starting edit for reference:', {
+                                refIndex,
+                                assetId: selectedRef.assetId,
+                                objectUrl: selectedRef.objectUrl,
+                                hasAssetId: !!selectedRef.assetId
+                              });
+
+                              // Try to fetch the full Asset object directly by ID first
+                              if (selectedRef.assetId) {
+                                try {
+                                  console.log('📡 Fetching asset by ID:', selectedRef.assetId);
+                                  const response = await fetch(`/api/assets/${selectedRef.assetId}`);
+
+                                  if (response.ok) {
+                                    const asset = await response.json();
+                                    console.log('✅ Fetched asset for editing:', {
+                                      id: asset.id,
+                                      name: asset.name,
+                                      url: asset.url
+                                    });
+
+                                    // Parse dates and editHistory
+                                    const parsedAsset: Asset = {
+                                      ...asset,
+                                      createdAt: new Date(asset.createdAt),
+                                      updatedAt: new Date(asset.updatedAt),
+                                      editHistory: asset.editHistory.map((h: any) => ({
+                                        ...h,
+                                        timestamp: new Date(h.timestamp)
+                                      }))
+                                    };
+
+                                    // Open EditAssetModal with the asset
+                                    setAssetToEdit(parsedAsset);
+                                    setShowEditAssetModal(true);
+                                    return;
+                                  } else {
+                                    console.error('❌ Failed to fetch asset:', response.status);
+                                  }
+                                } catch (error) {
+                                  console.error('❌ Error fetching asset:', error);
+                                }
+                              }
+
+                              // Fallback: try to find asset by matching URL
+                              console.log('🔍 Fallback: Searching all assets...');
+                              try {
+                                const response = await fetch(`/api/assets?projectId=${projectId}`);
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  const matchingAsset = data.assets?.find((a: Asset) =>
+                                    a.url === selectedRef.objectUrl ||
+                                    selectedRef.objectUrl.includes(a.id)
+                                  );
+
+                                  if (matchingAsset) {
+                                    console.log('✅ Found matching asset:', {
+                                      id: matchingAsset.id,
+                                      url: matchingAsset.url
+                                    });
+
+                                    // Parse dates and editHistory
+                                    const parsedAsset: Asset = {
+                                      ...matchingAsset,
+                                      createdAt: new Date(matchingAsset.createdAt),
+                                      updatedAt: new Date(matchingAsset.updatedAt),
+                                      editHistory: matchingAsset.editHistory.map((h: any) => ({
+                                        ...h,
+                                        timestamp: new Date(h.timestamp)
+                                      }))
+                                    };
+
+                                    setAssetToEdit(parsedAsset);
+                                    setShowEditAssetModal(true);
+                                  } else {
+                                    console.warn('⚠️ No matching asset found');
+                                    alert('Failed to load asset for editing. Please try again.');
+                                  }
+                                }
+                              } catch (error) {
+                                console.error('❌ Failed to load asset:', error);
+                                alert('Failed to load asset for editing. Please try again.');
+                              }
+                            }}
+                            className="p-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors flex-shrink-0"
+                            title="Edit this asset with AI"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
 
                         {/* Label and Change Hint */}
                         <div className="flex-1 min-w-0">
@@ -2422,6 +2479,61 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             selectedScene.referenceMode ??
             (scenes.findIndex((s) => s.id === selectedScene.id) === 0 ? 1 : 'previous')
           }
+          onEditReference={async (refIndex) => {
+            // Get the reference from combinedRefs
+            if (refIndex >= 0 && refIndex < combinedRefs.length) {
+              const selectedRef = combinedRefs[refIndex];
+
+              console.log('🎨 [Edit Reference] Starting edit for reference:', {
+                refIndex,
+                assetId: selectedRef.assetId,
+                objectUrl: selectedRef.objectUrl,
+                hasAssetId: !!selectedRef.assetId
+              });
+
+              // Try to fetch the full Asset object
+              if (selectedRef.assetId) {
+                try {
+                  console.log('📡 Fetching asset by ID:', selectedRef.assetId);
+                  const response = await fetch(`/api/assets/${selectedRef.assetId}`);
+
+                  if (response.ok) {
+                    const asset = await response.json();
+                    console.log('✅ Fetched asset for editing:', {
+                      id: asset.id,
+                      name: asset.name,
+                      url: asset.url
+                    });
+
+                    // Parse dates and editHistory
+                    const parsedAsset: Asset = {
+                      ...asset,
+                      createdAt: new Date(asset.createdAt),
+                      updatedAt: new Date(asset.updatedAt),
+                      editHistory: asset.editHistory.map((h: any) => ({
+                        ...h,
+                        timestamp: new Date(h.timestamp)
+                      }))
+                    };
+
+                    // Open EditAssetModal with the asset
+                    setAssetToEdit(parsedAsset);
+                    setShowEditAssetModal(true);
+                  } else {
+                    console.error('❌ Failed to fetch asset:', response.status);
+                    alert('Failed to load asset for editing. Please try again.');
+                  }
+                } catch (error) {
+                  console.error('❌ Error fetching asset:', error);
+                  alert('Failed to load asset for editing. Please try again.');
+                }
+              } else {
+                // Legacy character ref without assetId
+                console.warn('⚠️ Legacy character ref without assetId');
+                alert('This reference cannot be edited. Please use the new asset system by uploading or generating new character references.');
+              }
+            }
+          }}
           onSelectReference={async (ref) => {
             // Get the asset's persistent URL if a numbered reference is selected
             let firstFrameDataUrl: string | undefined = undefined;

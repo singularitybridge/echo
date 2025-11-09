@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import React from 'react';
-import { X, Image as ImageIcon, Film } from 'lucide-react';
+import { X, Image as ImageIcon, Film, Edit2 } from 'lucide-react';
 
 interface ReferenceSelectionModalProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface ReferenceSelectionModalProps {
   characterRefs: string[];
   selectedReference: 'previous' | number;
   onSelectReference: (ref: 'previous' | number) => void;
+  onEditReference?: (refIndex: number) => void;
   sceneIndex: number;
   previousSceneTitle?: string;
   projectId: string;
@@ -22,6 +23,7 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
   characterRefs,
   selectedReference,
   onSelectReference,
+  onEditReference,
   sceneIndex,
   previousSceneTitle,
   projectId,
@@ -31,6 +33,14 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
   const handleSelect = (ref: 'previous' | number) => {
     onSelectReference(ref);
     onClose();
+  };
+
+  const handleEdit = (refIndex: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEditReference) {
+      onEditReference(refIndex);
+      onClose();
+    }
   };
 
   return (
@@ -113,6 +123,27 @@ export const ReferenceSelectionModal: React.FC<ReferenceSelectionModalProps> = (
                     </svg>
                   </div>
                 )}
+
+                {/* Edit button overlay */}
+                {onEditReference && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => handleEdit(index, e)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        handleEdit(index, e as any);
+                      }
+                    }}
+                    className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded-md shadow-lg">
+                      <Edit2 className="w-3 h-3" />
+                      <span className="text-xs font-medium">Edit</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/10 transition-all pointer-events-none" />
               </button>
