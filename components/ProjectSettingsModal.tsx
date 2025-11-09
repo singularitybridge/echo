@@ -125,51 +125,53 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Creation Parameters Section */}
+          {/* Story Generation Inputs Section */}
           {generationMetadata && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Creation Parameters</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Story Generation Inputs</h3>
 
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">Creation Mode</span>
-                  <span className="text-sm font-semibold text-gray-900 capitalize">
-                    {generationMetadata.mode === 'quick' ? 'Quick Start' : 'Custom Story'}
-                  </span>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-4">
+                {/* Mode and Timestamp */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-xs text-indigo-600 font-medium">Creation Mode</span>
+                    <div className="text-sm font-semibold text-gray-900 mt-1">
+                      {generationMetadata.mode === 'quick' ? '⚡ Quick Start' : '✨ Custom Story'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-indigo-600 font-medium">Created</span>
+                    <div className="text-sm text-gray-900 mt-1">
+                      {new Date(generationMetadata.timestamp).toLocaleDateString()}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">Created At</span>
-                  <span className="text-sm text-gray-900">
-                    {new Date(generationMetadata.timestamp).toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="text-sm font-medium text-gray-600 mb-2">Parameters</div>
-                  <div className="space-y-2">
+                <div className="border-t border-indigo-200 pt-3">
+                  <div className="text-sm font-semibold text-indigo-900 mb-3">Generation Parameters</div>
+                  <div className="space-y-2.5">
                     {generationMetadata.mode === 'quick' ? (
                       <>
                         {generationMetadata.originalParams.genre && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Genre</span>
-                            <span className="text-xs font-medium text-gray-700 capitalize">
+                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                            <span className="text-xs font-medium text-gray-600">Genre</span>
+                            <span className="text-sm font-semibold text-gray-900 capitalize">
                               {generationMetadata.originalParams.genre}
                             </span>
                           </div>
                         )}
                         {generationMetadata.originalParams.type && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Story Type</span>
-                            <span className="text-xs font-medium text-gray-700 capitalize">
+                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                            <span className="text-xs font-medium text-gray-600">Story Type</span>
+                            <span className="text-sm font-semibold text-gray-900 capitalize">
                               {generationMetadata.originalParams.type.replace('-', ' ')}
                             </span>
                           </div>
                         )}
                         {generationMetadata.originalParams.energy && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Energy</span>
-                            <span className="text-xs font-medium text-gray-700 capitalize">
+                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                            <span className="text-xs font-medium text-gray-600">Energy/Pacing</span>
+                            <span className="text-sm font-semibold text-gray-900 capitalize">
                               {generationMetadata.originalParams.energy}
                             </span>
                           </div>
@@ -178,31 +180,37 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     ) : (
                       <>
                         {generationMetadata.originalParams.concept && (
-                          <div>
-                            <div className="text-xs text-gray-500 mb-1">Concept</div>
-                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                          <div className="bg-white rounded-lg px-3 py-2">
+                            <div className="text-xs font-medium text-gray-600 mb-1">Concept / What Happens</div>
+                            <div className="text-sm text-gray-900 leading-relaxed">
                               {generationMetadata.originalParams.concept}
                             </div>
                           </div>
                         )}
                         {generationMetadata.originalParams.character && (
-                          <div>
-                            <div className="text-xs text-gray-500 mb-1">Character</div>
-                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                          <div className="bg-white rounded-lg px-3 py-2">
+                            <div className="text-xs font-medium text-gray-600 mb-1">Character / Who's Involved</div>
+                            <div className="text-sm text-gray-900 leading-relaxed">
                               {generationMetadata.originalParams.character}
                             </div>
                           </div>
                         )}
                         {generationMetadata.originalParams.mood && (
-                          <div>
-                            <div className="text-xs text-gray-500 mb-1">Mood</div>
-                            <div className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                          <div className="bg-white rounded-lg px-3 py-2">
+                            <div className="text-xs font-medium text-gray-600 mb-1">Mood & Tone</div>
+                            <div className="text-sm text-gray-900 leading-relaxed">
                               {generationMetadata.originalParams.mood}
                             </div>
                           </div>
                         )}
                       </>
                     )}
+                  </div>
+                </div>
+
+                <div className="border-t border-indigo-200 pt-3">
+                  <div className="text-xs text-indigo-700 italic">
+                    These parameters were used to generate the initial story and can guide future script edits.
                   </div>
                 </div>
               </div>
