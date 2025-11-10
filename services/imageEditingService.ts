@@ -164,6 +164,33 @@ async function generateWithSeedEdit(
 }
 
 /**
+ * Generate image using SeedEdit v4 (SeeDream)
+ */
+async function generateWithSeedEditV4(
+  uploadedImageUrl: string,
+  prompt: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+
+  const result = await fal.subscribe(
+    'fal-ai/bytedance/seedream/v4/edit',
+    {
+      input: {
+        image_url: uploadedImageUrl,
+        prompt: enhancedPrompt,
+      },
+    }
+  );
+
+  const imageUrl = result.data?.image?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in SeedEdit v4 response');
+  }
+
+  return { imageUrl };
+}
+
+/**
  * Generate image with specified model
  */
 export async function generateWithModel(
@@ -219,6 +246,14 @@ export async function generateWithModel(
           prompt
         );
         imageUrl = seedEditResult.imageUrl;
+        break;
+
+      case 'seededit-v4':
+        const seedEditV4Result = await generateWithSeedEditV4(
+          uploadedImageUrl,
+          prompt
+        );
+        imageUrl = seedEditV4Result.imageUrl;
         break;
 
       default:

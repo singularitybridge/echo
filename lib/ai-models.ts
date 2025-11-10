@@ -88,6 +88,24 @@ export const MODEL_DEFINITIONS: Record<ImageEditingModel, ModelDefinition> = {
     estimatedTimeSeconds: 3.8,
     colorAccent: 'pink',
   },
+  'seededit-v4': {
+    id: 'seededit-v4',
+    name: 'SeedEdit v4',
+    provider: 'ByteDance',
+    endpoint: 'fal-ai/bytedance/seedream/v4/edit',
+    icon: 'palette',
+    speed: 'medium',
+    tags: ['content-preservation'],
+    description:
+      'Latest version with enhanced instruction following and content preservation. Improved quality and fidelity in image editing.',
+    useCases: [
+      'High-quality edits with precise content preservation',
+      'Advanced style transfers maintaining structure',
+      'Complex modifications respecting composition',
+    ],
+    estimatedTimeSeconds: 4.0,
+    colorAccent: 'violet',
+  },
 };
 
 /**

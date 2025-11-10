@@ -776,7 +776,24 @@ export default function EditAssetModal({
                               {result.error && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
                                   <AlertCircle className="w-5 h-5 text-red-400 mb-1" />
-                                  <p className="text-xs text-red-500 text-center">{result.error}</p>
+                                  <p className="text-xs text-red-500 text-center">
+                                    {(() => {
+                                      // Handle string errors
+                                      if (typeof result.error === 'string') {
+                                        return result.error;
+                                      }
+                                      // Handle validation error objects {loc, msg, type}
+                                      if (result.error && typeof result.error === 'object' && 'msg' in result.error) {
+                                        return (result.error as any).msg;
+                                      }
+                                      // Handle array of validation errors
+                                      if (Array.isArray(result.error) && result.error.length > 0 && 'msg' in result.error[0]) {
+                                        return result.error.map((e: any) => e.msg).join(', ');
+                                      }
+                                      // Fallback: stringify the object
+                                      return JSON.stringify(result.error);
+                                    })()}
+                                  </p>
                                 </div>
                               )}
                               {!result.loading && !result.error && result.imageBytes && (

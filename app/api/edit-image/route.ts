@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       'flux-kontext',
       'qwen-edit',
       'seededit',
+      'seededit-v4',
     ];
     if (!validModels.includes(selectedModel)) {
       return NextResponse.json(

@@ -10,7 +10,8 @@ export type ImageEditingModel =
   | 'gemini-flash'
   | 'flux-kontext'
   | 'qwen-edit'
-  | 'seededit';
+  | 'seededit'
+  | 'seededit-v4';
 
 /**
  * Supported AI image generation models
