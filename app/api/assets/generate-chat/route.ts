@@ -182,13 +182,13 @@ async function generateAssets(
       let imageBytes: string | undefined;
       let mimeType = 'image/png';
 
-      if (response.parts && Array.isArray(response.parts)) {
-        const imagePartCamel = response.parts.find((part: any) => part.inlineData);
+      if ((response as any).parts && Array.isArray((response as any).parts)) {
+        const imagePartCamel = (response as any).parts.find((part: any) => part.inlineData);
         if (imagePartCamel?.inlineData) {
           imageBytes = imagePartCamel.inlineData.data;
           mimeType = imagePartCamel.inlineData.mimeType || mimeType;
         } else {
-          const imagePartSnake = response.parts.find((part: any) => part.inline_data);
+          const imagePartSnake = (response as any).parts.find((part: any) => part.inline_data);
           if (imagePartSnake?.inline_data) {
             imageBytes = imagePartSnake.inline_data.data;
             mimeType = imagePartSnake.inline_data.mime_type || imagePartSnake.inline_data.mimeType || mimeType;
