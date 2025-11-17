@@ -133,6 +133,7 @@ export interface AssetGenerationRequest {
  */
 export interface EditAssetRequest {
   editPrompt: string;
+  model?: string;
 }
 
 /**
