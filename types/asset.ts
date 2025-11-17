@@ -12,7 +12,7 @@ export type AssetType = 'character' | 'prop' | 'location' | 'background' | 'uplo
 /**
  * AI providers that can generate or edit assets
  */
-export type AssetProvider = 'fal-ai' | 'gemini' | 'upload';
+export type AssetProvider = 'fal-ai' | 'gemini' | 'upload' | 'ai-edited';
 
 /**
  * Image format options
