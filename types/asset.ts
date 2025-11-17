@@ -160,6 +160,7 @@ export interface AssetFilters {
   provider?: AssetProvider;
   search?: string; // Search in name/description
   usedInScene?: string; // Filter by scene ID
+  parentAssetId?: string | null; // Filter by parent asset (null = root assets only)
 }
 
 /**
