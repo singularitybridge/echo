@@ -4,9 +4,9 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp } from 'lucide-react';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
-import { GeneratedImage } from '../services/imageService';
+import { GeneratedImage, generateImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
 import { evaluateVideo } from '../services/evaluationService.agentHub';
 import { extractFirstFrame, extractLastFrame } from '../services/frameExtractionService';
@@ -66,7 +66,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [startFrameEditorMode, setStartFrameEditorMode] = useState<'generate' | 'edit'>('generate');
 
   // Right panel view toggle
-  const [rightPanelView, setRightPanelView] = useState<'details' | 'chat'>('details');
+  const [rightPanelView, setRightPanelView] = useState<'details' | 'chat' | 'analysis'>('details');
 
   // Chat state for script editing (story-level)
   const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; timestamp: number}>>([]);
@@ -509,20 +509,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     const timeoutId = setTimeout(async () => {
       try {
-        // Save script (scenes + deletion tracking) to story storage
-        const response = await fetch(`/api/stories/${project.id}/script`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scenes: project.scenes,
-            deletedStoryStorageAssets: project.deletedStoryStorageAssets || [],
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to save script');
-        }
-
+        // Save project using project storage service
+        await projectStorage.saveProject(project);
         console.log('Project auto-saved:', project.id);
       } catch (error) {
         console.error('Failed to auto-save project:', error);
@@ -1851,9 +1839,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           return (
           <div className={rightPanelView === 'details' ? 'p-4 space-y-4' : 'flex flex-col flex-1 min-h-0'}>
             {/* Scene Info */}
-            <div className={rightPanelView === 'chat' ? 'flex flex-col flex-1 min-h-0' : ''}>
+            <div className={rightPanelView === 'chat' || rightPanelView === 'analysis' ? 'flex flex-col flex-1 min-h-0' : ''}>
               {/* View Toggle and Action Buttons */}
-              <div className={`flex items-center justify-between gap-3 mb-4 ${rightPanelView === 'chat' ? 'p-4 pb-0 flex-shrink-0' : ''}`}>
+              <div className={`flex items-center justify-between gap-3 mb-4 ${rightPanelView === 'chat' || rightPanelView === 'analysis' ? 'p-4 pb-0 flex-shrink-0' : ''}`}>
                 {/* View Toggle */}
                 <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
                   <button
@@ -1876,6 +1864,17 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   >
                     <MessageSquare className="w-3 h-3 inline mr-1" />
                     Chat
+                  </button>
+                  <button
+                    onClick={() => setRightPanelView('analysis')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      rightPanelView === 'analysis'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Search className="w-3 h-3 inline mr-1" />
+                    Analysis
                   </button>
                 </div>
 
@@ -1912,24 +1911,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   >
                     <Settings className="w-5 h-5" />
                   </button>
-
-                  {/* Evaluate Button - Icon Only */}
-                  <button
-                    onClick={() => handleEvaluateScene(selectedScene.id)}
-                    disabled={!selectedScene.videoUrl || evaluatingSceneIds.has(selectedScene.id)}
-                    className="p-1 text-purple-600 hover:text-purple-700 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
-                    title="Evaluate Video"
-                  >
-                    {evaluatingSceneIds.has(selectedScene.id) ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Search className="w-5 h-5" />
-                    )}
-                  </button>
                 </div>
               </div>
 
-              {/* Conditional View: Details or Chat */}
+              {/* Conditional View: Details, Chat, or Analysis */}
               {rightPanelView === 'details' ? (
                 <>
               {/* Duration */}
@@ -2150,42 +2135,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                             </button>
                           )}
                         </div>
-
-                        {/* AI-Powered Generation/Editing */}
-                        <div className="pt-3 border-t border-gray-200">
-                          <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1.5">
-                            <Sparkles size={12} className="text-indigo-600" />
-                            <span>AI-Powered Tools</span>
-                          </label>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setStartFrameEditorMode('generate');
-                                setShowStartFrameEditor(true);
-                              }}
-                              className="flex-1 px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg transition-all text-sm font-medium flex items-center justify-center gap-1.5"
-                              title="Use AI to generate a new start frame prompt"
-                            >
-                              <Sparkles size={14} />
-                              <span>AI Generate</span>
-                            </button>
-
-                            {/* AI Edit button - show if there's a frame to analyze */}
-                            {imageUrl && (
-                              <button
-                                onClick={() => {
-                                  setStartFrameEditorMode('edit');
-                                  setShowStartFrameEditor(true);
-                                }}
-                                className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg transition-all text-sm font-medium flex items-center justify-center gap-1.5"
-                                title="Use AI vision to analyze and improve current frame"
-                              >
-                                <Sparkles size={14} />
-                                <span>AI Edit</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     );
                   })()}
@@ -2265,124 +2214,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               </div>
             )}
 
-            {/* OpenAI API Key Input */}
-            {!openaiApiKey && selectedScene.generated && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-xs text-yellow-800 mb-2 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Optional: Add OpenAI API key for audio transcription
-                </p>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  className="w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-sm text-gray-900"
-                  onBlur={(e) => handleSaveOpenAIKey(e.target.value)}
-                />
-              </div>
-            )}
-
-            {/* Evaluation Results */}
-            {selectedScene.evaluation && (
-              <div className="border-t border-gray-200 pt-4">
-                <button
-                  onClick={() => setEvaluationExpanded(!evaluationExpanded)}
-                  className="w-full text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 hover:text-indigo-600 transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                  Evaluation Results
-                  {evaluationExpanded ? (
-                    <ChevronUp className="w-4 h-4 ml-auto" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 ml-auto" />
-                  )}
-                </button>
-
-                {evaluationExpanded && (
-                  <>
-                    {/* Score Badge */}
-                    <div className="mb-3">
-                      <span className={`px-2 py-1 rounded text-xs flex items-center gap-1 w-fit ${
-                        selectedScene.evaluation.overallScore >= 70
-                          ? 'bg-green-50 border border-green-200 text-green-700'
-                          : selectedScene.evaluation.overallScore >= 40
-                          ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
-                          : 'bg-red-50 border border-red-200 text-red-700'
-                      }`}>
-                        <Search className="w-3 h-3" />
-                        {selectedScene.evaluation.overallScore}%
-                      </span>
-                    </div>
-
-                    {/* Overall Score */}
-                    <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Overall Score</span>
-                        <span className={`text-xl font-bold ${
-                          selectedScene.evaluation.overallScore >= 70
-                            ? 'text-green-600'
-                            : selectedScene.evaluation.overallScore >= 40
-                            ? 'text-yellow-600'
-                            : 'text-red-600'
-                        }`}>
-                          {selectedScene.evaluation.overallScore}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Audio Score */}
-                <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                  <h5 className="text-xs font-medium text-gray-900 mb-2 flex items-center gap-2">
-                    <MessageSquare className="w-3 h-3" />
-                    Audio ({selectedScene.evaluation.audioEvaluation.score}%)
-                  </h5>
-                  <div className="space-y-1.5 text-xs">
-                    <div>
-                      <span className="text-gray-500">Expected:</span>
-                      <p className="text-gray-700 italic mt-0.5">&ldquo;{selectedScene.evaluation.audioEvaluation.expectedText}&rdquo;</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Transcribed:</span>
-                      <p className="text-gray-700 mt-0.5">{selectedScene.evaluation.audioEvaluation.transcribedText}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Frame Scores */}
-                <div className="space-y-2">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <h5 className="text-xs font-medium text-gray-900 mb-2">
-                      First Frame ({selectedScene.evaluation.firstFrameEvaluation.score}%)
-                    </h5>
-                    <img
-                      src={selectedScene.evaluation.firstFrameEvaluation.imageUrl}
-                      alt="First frame"
-                      className="w-full rounded mb-2"
-                    />
-                    <p className="text-xs text-gray-600">
-                      {selectedScene.evaluation.firstFrameEvaluation.analysis}
-                    </p>
-                  </div>
-
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <h5 className="text-xs font-medium text-gray-900 mb-2">
-                      Last Frame ({selectedScene.evaluation.lastFrameEvaluation.score}%)
-                    </h5>
-                    <img
-                      src={selectedScene.evaluation.lastFrameEvaluation.imageUrl}
-                      alt="Last frame"
-                      className="w-full rounded mb-2"
-                    />
-                    <p className="text-xs text-gray-600">
-                      {selectedScene.evaluation.lastFrameEvaluation.analysis}
-                    </p>
-                  </div>
-                </div>
-                  </>
-                )}
-              </div>
-            )}
             </>
-              ) : (
+              ) : rightPanelView === 'chat' ? (
                 /* Chat View for Shot Editing */
                 <div className="flex-1 flex flex-col min-h-0">
                   {/* Shot Details - Same styling as Details mode */}
@@ -2505,37 +2338,204 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     }}
                     className="p-4 border-t border-gray-200 bg-white flex-shrink-0"
                   >
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-end">
                       <textarea
                         value={shotChatInput}
-                        onChange={(e) => setShotChatInput(e.target.value)}
+                        onChange={(e) => {
+                          setShotChatInput(e.target.value);
+                          // Auto-grow textarea
+                          e.target.style.height = 'auto';
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                        }}
                         onKeyDown={(e) => {
-                          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                          if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
                             if (shotChatInput.trim() && !isEditingShot) {
                               editShot(shotChatInput);
                               setShotChatInput('');
+                              // Reset height
+                              e.currentTarget.style.height = 'auto';
                             }
                           }
                         }}
-                        rows={2}
-                        placeholder="Type your message... (Cmd+Enter to send)"
-                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        rows={1}
+                        placeholder="Describe your edit (Enter to send, Shift+Enter for new line)..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 text-sm min-h-[40px] max-h-[120px] overflow-y-auto"
+                        style={{ height: 'auto' }}
                         disabled={isEditingShot}
                         autoFocus
                       />
                       <button
                         type="submit"
                         disabled={!shotChatInput.trim() || isEditingShot}
-                        className="px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                        title="Send message (Cmd+Enter)"
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                        title="Send message (Enter)"
                       >
-                        <Edit3 className="w-5 h-5" />
+                        {isEditingShot ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <ArrowRight className="w-5 h-5" />
+                        )}
                       </button>
                     </div>
                   </form>
                 </div>
-              )}
+              ) : rightPanelView === 'analysis' ? (
+                /* Analysis View */
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* Analysis Header */}
+                  <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Search className="w-5 h-5 text-purple-600" />
+                      AI Analysis
+                    </h3>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Evaluate video quality against prompt and voiceover
+                    </p>
+                  </div>
+
+                  {/* Analysis Content */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Evaluate Button */}
+                    {!selectedScene.evaluation && (
+                      <div className="text-center py-8">
+                        <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-sm text-gray-500 mb-4">
+                          {selectedScene.videoUrl
+                            ? 'Run AI analysis to evaluate this video'
+                            : 'Generate a video first to run analysis'
+                          }
+                        </p>
+
+                        {/* OpenAI API Key Input */}
+                        {!openaiApiKey && selectedScene.generated && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left max-w-md mx-auto">
+                            <p className="text-xs text-yellow-800 mb-2 flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4" />
+                              Optional: Add OpenAI API key for audio transcription
+                            </p>
+                            <input
+                              type="password"
+                              placeholder="sk-..."
+                              className="w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-sm text-gray-900"
+                              onBlur={(e) => handleSaveOpenAIKey(e.target.value)}
+                            />
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => handleEvaluateScene(selectedScene.id)}
+                          disabled={!selectedScene.videoUrl || evaluatingSceneIds.has(selectedScene.id)}
+                          className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                        >
+                          {evaluatingSceneIds.has(selectedScene.id) ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span>Analyzing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Search className="w-5 h-5" />
+                              <span>Run Analysis</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Evaluation Results */}
+                    {selectedScene.evaluation && (
+                      <>
+                        {/* Score Badge */}
+                        <div className="text-center mb-6">
+                          <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-lg font-semibold ${
+                            selectedScene.evaluation.overallScore >= 70
+                              ? 'bg-green-50 border-2 border-green-200 text-green-700'
+                              : selectedScene.evaluation.overallScore >= 40
+                              ? 'bg-yellow-50 border-2 border-yellow-200 text-yellow-700'
+                              : 'bg-red-50 border-2 border-red-200 text-red-700'
+                          }`}>
+                            <Search className="w-5 h-5" />
+                            Overall Score: {selectedScene.evaluation.overallScore}%
+                          </span>
+                        </div>
+
+                        {/* Audio Score */}
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                          <h5 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-indigo-600" />
+                            Audio Evaluation ({selectedScene.evaluation.audioEvaluation.score}%)
+                          </h5>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-gray-600 font-medium">Expected:</span>
+                              <p className="text-gray-800 italic mt-1">&ldquo;{selectedScene.evaluation.audioEvaluation.expectedText}&rdquo;</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-600 font-medium">Transcribed:</span>
+                              <p className="text-gray-800 mt-1">{selectedScene.evaluation.audioEvaluation.transcribedText}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Frame Evaluations */}
+                        <div className="space-y-3">
+                          {/* First Frame */}
+                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                              First Frame ({selectedScene.evaluation.firstFrameEvaluation.score}%)
+                            </h5>
+                            <img
+                              src={selectedScene.evaluation.firstFrameEvaluation.imageUrl}
+                              alt="First frame"
+                              className="w-full rounded-lg mb-3 border border-gray-300"
+                            />
+                            <p className="text-sm text-gray-700">
+                              {selectedScene.evaluation.firstFrameEvaluation.analysis}
+                            </p>
+                          </div>
+
+                          {/* Last Frame */}
+                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                              Last Frame ({selectedScene.evaluation.lastFrameEvaluation.score}%)
+                            </h5>
+                            <img
+                              src={selectedScene.evaluation.lastFrameEvaluation.imageUrl}
+                              alt="Last frame"
+                              className="w-full rounded-lg mb-3 border border-gray-300"
+                            />
+                            <p className="text-sm text-gray-700">
+                              {selectedScene.evaluation.lastFrameEvaluation.analysis}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Re-run Analysis Button */}
+                        <div className="pt-4 border-t border-gray-200">
+                          <button
+                            onClick={() => handleEvaluateScene(selectedScene.id)}
+                            disabled={evaluatingSceneIds.has(selectedScene.id)}
+                            className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {evaluatingSceneIds.has(selectedScene.id) ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Re-analyzing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Search className="w-4 h-4" />
+                                <span>Re-run Analysis</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           );
@@ -3096,7 +3096,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           if (chatInput.trim() && !isRefining) {
                             editStory(chatInput);
@@ -3104,17 +3104,18 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                           }
                         }
                       }}
-                      rows={2}
-                      placeholder="Type your message... (Cmd+Enter to send)"
+                      rows={1}
+                      placeholder="Type your message... (Enter to send)"
                       className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                       disabled={isRefining}
                     />
                     <button
                       type="submit"
                       disabled={!chatInput.trim() || isRefining}
-                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors self-end"
+                      className="px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                      title="Send message (Enter)"
                     >
-                      Send
+                      <Edit3 className="w-5 h-5" />
                     </button>
                   </div>
                 </form>
@@ -3167,10 +3168,95 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             return undefined;
           })()}
           onPromptGenerated={async (prompt) => {
-            // TODO: Implement image generation with the AI-generated prompt
-            // This will trigger the asset creation flow with the generated prompt
-            console.log('AI-generated prompt:', prompt);
-            alert(`AI-generated prompt:\n\n${prompt}\n\nNext: Implement image generation with this prompt`);
+            try {
+              console.log('[Start Frame Generator] Generating image with AI prompt:', prompt);
+
+              // Generate image using Fal.ai
+              const aspectRatio = project.aspectRatio || '9:16';
+              const result = await generateImage({ prompt, aspectRatio });
+
+              // Convert base64 to blob
+              const byteCharacters = atob(result.imageBytes);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: 'image/png' });
+
+              // Upload to assets API
+              const formData = new FormData();
+              formData.append('file', blob, `start-frame-${selectedSceneId}-${Date.now()}.png`);
+              formData.append('projectId', project.id);
+              formData.append('type', 'character');
+              formData.append('category', 'characters');
+              formData.append('name', `${selectedScene?.title || 'Scene'} - AI Generated Start Frame`);
+              formData.append('description', 'AI-generated start frame');
+              formData.append('provider', 'fal');
+              formData.append('generationPrompt', prompt);
+
+              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3039';
+              const uploadResponse = await fetch(`${baseUrl}/api/assets/upload`, {
+                method: 'POST',
+                body: formData,
+              });
+
+              if (!uploadResponse.ok) {
+                throw new Error('Failed to upload generated image');
+              }
+
+              const uploadedAsset = await uploadResponse.json();
+              console.log('[Start Frame Generator] Image uploaded:', uploadedAsset.id);
+
+              // Set as start frame for this scene
+              setProject((prevProject) => {
+                if (!prevProject) return prevProject;
+
+                return {
+                  ...prevProject,
+                  scenes: prevProject.scenes.map((scene) =>
+                    scene.id === selectedSceneId
+                      ? {
+                          ...scene,
+                          referenceMode: uploadedAsset.id, // Asset ID instead of number
+                        }
+                      : scene
+                  ),
+                };
+              });
+
+              // Reload assets to show the new image
+              const dbAssets = await AssetLoader.loadProjectAssets(projectId);
+              const assetRefs = AssetLoader.assetsToAssetReferences(dbAssets);
+
+              // Convert to full GeneratedImage format with blob data
+              const newAssetImages: GeneratedImage[] = [];
+              for (const assetRef of assetRefs) {
+                try {
+                  const response = await fetch(assetRef.objectUrl);
+                  if (response.ok) {
+                    const blob = await response.blob();
+                    newAssetImages.push({
+                      objectUrl: assetRef.objectUrl,
+                      blob,
+                      width: 1024,
+                      height: 1792,
+                    });
+                  }
+                } catch (error) {
+                  console.warn(`Failed to load asset ${assetRef.id}:`, error);
+                }
+              }
+
+              // Combine with existing character refs
+              setCombinedRefs([...newAssetImages, ...characterRefs]);
+
+              // Return the uploaded asset URL for preview in modal
+              return uploadedAsset.url;
+            } catch (error) {
+              console.error('[Start Frame Generator] Error:', error);
+              throw error;
+            }
           }}
         />
       )}

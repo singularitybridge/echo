@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Film, Video as VideoIcon, Package, Plus, User, Bot } from 'lucide-react';
+import { Film, Video as VideoIcon, Package, Plus, User, Bot, LogOut } from 'lucide-react';
 import { Project } from '../types/project';
 import { StoryDraft } from '../types/story-creation';
 import { Asset } from '../types/asset';
@@ -21,6 +21,15 @@ const ProjectList: React.FC = () => {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isGeneratingInBackground, setIsGeneratingInBackground] = useState(false);
   const router = useRouter();
+
+  const handleLogout = () => {
+    // Clear localStorage
+    localStorage.removeItem('authToken');
+    // Clear cookie
+    document.cookie = 'authToken=; path=/; max-age=0';
+    // Redirect to login
+    router.push('/login');
+  };
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -323,6 +332,14 @@ const ProjectList: React.FC = () => {
                 aria-label="Create New Story"
               >
                 <Plus className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-2.5 text-gray-600 hover:text-red-600 transition-all hover:scale-105 cursor-pointer"
+                title="Logout"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
