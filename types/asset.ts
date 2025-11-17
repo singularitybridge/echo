@@ -153,6 +153,7 @@ export interface AssetUploadMetadata {
  * Asset filter options for library view
  */
 export interface AssetFilters {
+  projectId?: string;
   type?: AssetType;
   category?: string;
   tags?: string[];
