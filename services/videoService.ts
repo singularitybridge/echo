@@ -2,7 +2,6 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { generateVideo as generateVideoGemini } from './geminiService';
 import { generateVideoWithFal } from './falService';
 import {
   GenerateVideoParams,
@@ -60,17 +59,41 @@ export const generateVideo = async (
       )
     : [];
 
-  // Convert start frame data URL to ImageFile if provided
+  // Convert start frame data URL or file path to ImageFile if provided
   let startFrame: ImageFile | null = null;
   if (startFrameDataUrl) {
-    const base64Data = startFrameDataUrl.split(',')[1];
-    const mimeType = startFrameDataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
-    const blob = await fetch(startFrameDataUrl).then(r => r.blob());
+    let blob: Blob;
+    let base64Data: string;
+    let mimeType: string;
+
+    // Check if it's a data URL or a file path
+    if (startFrameDataUrl.startsWith('data:')) {
+      // It's a data URL (legacy format)
+      base64Data = startFrameDataUrl.split(',')[1];
+      mimeType = startFrameDataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
+      blob = await fetch(startFrameDataUrl).then(r => r.blob());
+    } else {
+      // It's a file path (new format like /frames/project-id/scene-id-last.png)
+      // Fetch the image from the public path
+      const response = await fetch(startFrameDataUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch start frame from ${startFrameDataUrl}: ${response.statusText}`);
+      }
+      blob = await response.blob();
+      mimeType = blob.type || 'image/png';
+
+      // Convert blob to base64
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
+      base64Data = btoa(binary);
+    }
+
     startFrame = {
       file: new File([blob], 'start-frame.png', { type: mimeType }),
       base64: base64Data,
     };
-    console.log('Converted start frame data URL to ImageFile for shot continuity');
+    console.log('Converted start frame to ImageFile for shot continuity');
   }
 
   // Use FRAMES_TO_VIDEO mode when start frame is provided (shot continuity)
