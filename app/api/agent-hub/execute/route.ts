@@ -5,12 +5,21 @@
 
 import {NextRequest, NextResponse} from 'next/server';
 
+interface AgentHubAttachment {
+  type: 'url' | 'base64';
+  mimeType: string;
+  url?: string;
+  data?: string;
+  fileName?: string;
+}
+
 interface ExecuteRequest {
   assistantId: string;
   userInput: string;
   responseFormat?: {
     type: 'json_object';
   };
+  attachments?: AgentHubAttachment[];
 }
 
 /**
@@ -56,6 +65,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         query: body.userInput,
         responseFormat: body.responseFormat,
+        attachments: body.attachments,
       }),
     });
 

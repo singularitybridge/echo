@@ -8,12 +8,21 @@
  * Provides integration with Agent Hub for AI agent execution via internal proxy
  */
 
+export interface AgentHubAttachment {
+  type: 'url' | 'base64';
+  mimeType: string;
+  url?: string;
+  data?: string;
+  fileName?: string;
+}
+
 export interface AgentHubExecuteParams {
   assistantId: string;
   userInput: string;
   responseFormat?: {
     type: 'json_object';
   };
+  attachments?: AgentHubAttachment[];
 }
 
 interface AgentHubProxyResponse {
@@ -46,6 +55,7 @@ export const executeAgent = async (
         assistantId: params.assistantId,
         userInput: params.userInput,
         responseFormat: params.responseFormat,
+        attachments: params.attachments,
       }),
     });
 
@@ -77,10 +87,117 @@ export const executeStoryGenAgent = async (
   userInput: string,
 ): Promise<string> => {
   return executeAgent({
-    assistantId: '690a1bad455d30f7a1c0db7d', // story-gen-agent ID
+    assistantId: 'story-gen-agent',
     userInput,
     responseFormat: {
       type: 'json_object',
     },
+  });
+};
+
+/**
+ * Execute character design expert agent
+ */
+export const executeCharacterDesignAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'character-design-expert',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute poses and outfits expert agent
+ */
+export const executePosesOutfitsAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'poses-outfits-expert',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute story editor agent (for story editing tasks)
+ */
+export const executeStoryEditorAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'story-editor',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute frame evaluation agent (for video frame analysis)
+ */
+export const executeFrameEvalAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'frame-eval-agent',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute audio comparison agent (for voiceover matching)
+ */
+export const executeAudioComparisonAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'audio-comparison-agent',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute start frame generator agent (for creating new start frame prompts)
+ */
+export const executeStartFrameGeneratorAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'start-frame-generator',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+};
+
+/**
+ * Execute start frame editor agent (for editing existing start frame prompts with vision analysis)
+ */
+export const executeStartFrameEditorAgent = async (
+  userInput: string,
+  imageAttachment?: AgentHubAttachment,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'start-frame-editor',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+    attachments: imageAttachment ? [imageAttachment] : undefined,
   });
 };

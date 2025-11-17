@@ -8,20 +8,22 @@ import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, 
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
-import { evaluateVideo } from '../services/evaluationService';
+import { evaluateVideo } from '../services/evaluationService.agentHub';
 import { extractFirstFrame, extractLastFrame } from '../services/frameExtractionService';
 import { CostTracker } from './CostTracker';
 import { videoStorage } from '../services/videoStorage.server';
 import { evaluationStorage } from '../services/evaluationStorage.server';
 import { projectStorage } from '../services/projectStorage.server';
+import { frameStorage } from '../services/frameStorage.server';
 import { Project, Scene, GenerationSettings, SceneAssetAttachment } from '../types/project';
-import CharacterRefsModal from './CharacterRefsModal';
+import CharacterDesignChatModal from './CharacterDesignChatModal';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { PlaybackBar } from './PlaybackBar';
 import AssetPickerModal from './assets/AssetPickerModal';
 import EditAssetModal from './assets/EditAssetModal';
+import { StartFrameEditorModal } from './StartFrameEditorModal';
 import { AssetLoader } from '../utils/assetLoader';
 import type { Asset } from '@/types/asset';
 import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-models';
@@ -60,6 +62,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [showScriptPreview, setShowScriptPreview] = useState<boolean>(false);
   const [showEditAssetModal, setShowEditAssetModal] = useState<boolean>(false);
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
+  const [showStartFrameEditor, setShowStartFrameEditor] = useState<boolean>(false);
+  const [startFrameEditorMode, setStartFrameEditorMode] = useState<'generate' | 'edit'>('generate');
 
   // Right panel view toggle
   const [rightPanelView, setRightPanelView] = useState<'details' | 'chat'>('details');
@@ -866,8 +870,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           // Use previous scene's last frame
           if (sceneIndex > 0) {
             const previousScene = scenes[sceneIndex - 1];
-            if (previousScene.lastFrameDataUrl) {
-              startFrameDataUrl = previousScene.lastFrameDataUrl;
+            // Support both new lastFrameUrl and legacy lastFrameDataUrl
+            const lastFrame = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
+            if (lastFrame) {
+              startFrameDataUrl = lastFrame;
               console.log(`Using last frame from previous scene "${previousScene.title}" for shot continuity`);
             } else {
               console.log('Previous scene has no last frame stored');
@@ -894,8 +900,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         // Priority 3: Backward compatibility
         if (sceneIndex > 0) {
           const previousScene = scenes[sceneIndex - 1];
-          if (previousScene.lastFrameDataUrl) {
-            startFrameDataUrl = previousScene.lastFrameDataUrl;
+          // Support both new lastFrameUrl and legacy lastFrameDataUrl
+          const lastFrame = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
+          if (lastFrame) {
+            startFrameDataUrl = lastFrame;
             console.log(`Using last frame from previous scene "${previousScene.title}" for shot continuity`);
           } else {
             console.log('Previous scene has no last frame stored');
@@ -940,22 +948,30 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       }
 
       // Now extract frames using server-side FFmpeg for frame-perfect extraction
-      let firstFrameDataUrl: string;
-      let lastFrameDataUrl: string;
+      let firstFrameUrl: string = '';
+      let lastFrameUrl: string = '';
 
       try {
         // Extract first frame (frame #0) using server-side FFmpeg
-        firstFrameDataUrl = await extractFirstFrame(projectId, sceneId);
+        const firstFrameDataUrl = await extractFirstFrame(projectId, sceneId);
         console.log('Extracted first frame using server-side FFmpeg');
 
+        // Save first frame as file instead of storing base64 in JSON
+        firstFrameUrl = await frameStorage.saveFrame(projectId, sceneId, 'first', firstFrameDataUrl);
+        console.log('Saved first frame to file:', firstFrameUrl);
+
         // Extract EXACT last frame using server-side FFmpeg
-        lastFrameDataUrl = await extractLastFrame(projectId, sceneId);
+        const lastFrameDataUrl = await extractLastFrame(projectId, sceneId);
         console.log('Extracted last frame using server-side FFmpeg for shot continuity');
+
+        // Save last frame as file instead of storing base64 in JSON
+        lastFrameUrl = await frameStorage.saveFrame(projectId, sceneId, 'last', lastFrameDataUrl);
+        console.log('Saved last frame to file:', lastFrameUrl);
       } catch (frameErr) {
         console.error('Failed to extract frames from server:', frameErr);
-        // For now, use empty data URLs as fallback
-        firstFrameDataUrl = '';
-        lastFrameDataUrl = '';
+        // For now, use empty URLs as fallback
+        firstFrameUrl = '';
+        lastFrameUrl = '';
       }
 
       setProject((prevProject) => {
@@ -970,8 +986,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   generated: true,
                   videoUrl: serverUrl,
                   settings: sceneSettings,
-                  firstFrameDataUrl, // Store first frame for thumbnails
-                  lastFrameDataUrl, // Store last frame for next scene
+                  firstFrameUrl, // Store first frame file path for thumbnails
+                  lastFrameUrl, // Store last frame file path for next scene
                   evaluation: undefined, // Clear previous evaluation
                 }
               : s
@@ -1075,8 +1091,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           // Use previous scene's last frame
           if (sceneIndex > 0) {
             const previousScene = scenes[sceneIndex - 1];
-            if (previousScene.lastFrameDataUrl) {
-              startFrameDataUrl = previousScene.lastFrameDataUrl;
+            // Support both new lastFrameUrl and legacy lastFrameDataUrl
+            const lastFrame = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
+            if (lastFrame) {
+              startFrameDataUrl = lastFrame;
               console.log(`Using last frame from previous scene "${previousScene.title}" for shot continuity`);
             }
           }
@@ -1097,8 +1115,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         // Backward compatibility
         if (sceneIndex > 0) {
           const previousScene = scenes[sceneIndex - 1];
-          if (previousScene.lastFrameDataUrl) {
-            startFrameDataUrl = previousScene.lastFrameDataUrl;
+          // Support both new lastFrameUrl and legacy lastFrameDataUrl
+          const lastFrame = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
+          if (lastFrame) {
+            startFrameDataUrl = lastFrame;
           }
         }
 
@@ -1198,14 +1218,18 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       const serverUrl = await videoStorage.saveVideo(projectId, selectedSceneId, result.blob);
       console.log(`Saved selected video (${result.model}) for scene ${selectedSceneId}`);
 
-      // Extract frames
-      let firstFrameDataUrl = result.thumbnailDataUrl || '';
-      let lastFrameDataUrl = '';
+      // Extract frames and save as files
+      let firstFrameUrl = '';
+      let lastFrameUrl = '';
 
       try {
-        firstFrameDataUrl = await extractFirstFrame(projectId, selectedSceneId);
-        lastFrameDataUrl = await extractLastFrame(projectId, selectedSceneId);
-        console.log('Extracted frames for selected video');
+        const firstFrameDataUrl = await extractFirstFrame(projectId, selectedSceneId);
+        firstFrameUrl = await frameStorage.saveFrame(projectId, selectedSceneId, 'first', firstFrameDataUrl);
+
+        const lastFrameDataUrl = await extractLastFrame(projectId, selectedSceneId);
+        lastFrameUrl = await frameStorage.saveFrame(projectId, selectedSceneId, 'last', lastFrameDataUrl);
+
+        console.log('Extracted and saved frames for selected video');
       } catch (frameErr) {
         console.error('Failed to extract frames:', frameErr);
       }
@@ -1228,8 +1252,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   generated: true,
                   videoUrl: serverUrl,
                   settings: sceneSettings,
-                  firstFrameDataUrl,
-                  lastFrameDataUrl,
+                  firstFrameUrl,
+                  lastFrameUrl,
                   evaluation: undefined,
                 }
               : s
@@ -1482,6 +1506,17 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             </button>
           )}
 
+          {/* Character Design Button */}
+          {project && (
+            <button
+              onClick={() => setShowRefsModal(true)}
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+              title="Character Design"
+            >
+              <Sparkles className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Preview Your Story Button */}
           {project && project.scenes.length > 0 && (
             <button
@@ -1548,7 +1583,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               }
             } else if (!isReference && index > 0) {
               const previousScene = scenes[index - 1];
-              thumbnailUrl = previousScene.lastFrameDataUrl;
+              // Support both new lastFrameUrl and legacy lastFrameDataUrl
+              thumbnailUrl = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
             }
 
             // Fallback: Try to get thumbnail from attachedAssets if no referenceMode is set
@@ -1700,7 +1736,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     let startFrameUrl: string | undefined;
                     if (isPrevious && sceneIndex > 0) {
                       const previousScene = scenes[sceneIndex - 1];
-                      startFrameUrl = previousScene.lastFrameDataUrl;
+                      // Support both new lastFrameUrl and legacy lastFrameDataUrl
+                      startFrameUrl = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
                     }
 
                     return (
@@ -1749,8 +1786,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       }
 
                       // If this scene has a generated video with last frame, return it
-                      if (scene.lastFrameDataUrl) {
-                        return scene.lastFrameDataUrl;
+                      // Support both new lastFrameUrl and legacy lastFrameDataUrl
+                      const lastFrame = scene.lastFrameUrl || scene.lastFrameDataUrl;
+                      if (lastFrame) {
+                        return lastFrame;
                       }
 
                       // Otherwise, recurse to previous scene
@@ -1957,7 +1996,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     } else if (isPrevious && sceneIndex > 0) {
                       // Use previous scene's last frame if available
                       const previousScene = scenes[sceneIndex - 1];
-                      imageUrl = previousScene.lastFrameDataUrl;
+                      // Support both new lastFrameUrl and legacy lastFrameDataUrl
+                      imageUrl = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
                     }
 
                     return (
@@ -2109,6 +2149,42 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                               <span>Edit</span>
                             </button>
                           )}
+                        </div>
+
+                        {/* AI-Powered Generation/Editing */}
+                        <div className="pt-3 border-t border-gray-200">
+                          <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1.5">
+                            <Sparkles size={12} className="text-indigo-600" />
+                            <span>AI-Powered Tools</span>
+                          </label>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setStartFrameEditorMode('generate');
+                                setShowStartFrameEditor(true);
+                              }}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg transition-all text-sm font-medium flex items-center justify-center gap-1.5"
+                              title="Use AI to generate a new start frame prompt"
+                            >
+                              <Sparkles size={14} />
+                              <span>AI Generate</span>
+                            </button>
+
+                            {/* AI Edit button - show if there's a frame to analyze */}
+                            {imageUrl && (
+                              <button
+                                onClick={() => {
+                                  setStartFrameEditorMode('edit');
+                                  setShowStartFrameEditor(true);
+                                }}
+                                className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg transition-all text-sm font-medium flex items-center justify-center gap-1.5"
+                                title="Use AI vision to analyze and improve current frame"
+                              >
+                                <Sparkles size={14} />
+                                <span>AI Edit</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -2467,12 +2543,30 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
       </div>
 
-      {/* Character Assets Modal */}
-      {showRefsModal && (
-        <CharacterRefsModal
-          projectId={projectId}
-          currentAspectRatio={currentSettings.aspectRatio}
+      {/* Character Design Chat Modal */}
+      {showRefsModal && project && (
+        <CharacterDesignChatModal
+          isOpen={showRefsModal}
           onClose={() => setShowRefsModal(false)}
+          story={{
+            title: project.title,
+            description: project.description,
+            type: project.type,
+            character: project.character,
+            scenes: project.scenes.map(s => ({
+              sceneNumber: parseInt(s.id.split('-')[1]) || 1,
+              title: s.title,
+              duration: s.duration,
+              visualPrompt: s.prompt,
+              voiceover: s.voiceover || '',
+              cameraAngle: s.cameraAngle,
+            })),
+          }}
+          projectId={projectId}
+          onCharacterRefsGenerated={async (refUrls) => {
+            // Reload character references after generation
+            await loadCharacterReferences();
+          }}
         />
       )}
 
@@ -3043,6 +3137,41 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           onPlayAll={handlePlayAll}
           onStop={handleStop}
           onToggleLoop={handleToggleLoop}
+        />
+      )}
+
+      {/* Start Frame Editor Modal (AI-powered) */}
+      {project && selectedScene && (
+        <StartFrameEditorModal
+          isOpen={showStartFrameEditor}
+          onClose={() => setShowStartFrameEditor(false)}
+          project={project}
+          scene={selectedScene}
+          sceneIndex={scenes.findIndex((s) => s.id === selectedSceneId)}
+          mode={startFrameEditorMode}
+          currentFrameUrl={(() => {
+            // Get current frame URL for edit mode
+            const currentRef = selectedScene.referenceMode ?? (scenes.findIndex((s) => s.id === selectedSceneId) === 0 ? 1 : 'previous');
+            const isPrevious = currentRef === 'previous';
+
+            if (!isPrevious && typeof currentRef === 'number') {
+              const refIndex = currentRef - 1;
+              if (combinedRefs[refIndex]) {
+                return combinedRefs[refIndex].objectUrl;
+              }
+            } else if (isPrevious && scenes.findIndex((s) => s.id === selectedSceneId) > 0) {
+              const sceneIndex = scenes.findIndex((s) => s.id === selectedSceneId);
+              const previousScene = scenes[sceneIndex - 1];
+              return previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
+            }
+            return undefined;
+          })()}
+          onPromptGenerated={async (prompt) => {
+            // TODO: Implement image generation with the AI-generated prompt
+            // This will trigger the asset creation flow with the generated prompt
+            console.log('AI-generated prompt:', prompt);
+            alert(`AI-generated prompt:\n\n${prompt}\n\nNext: Implement image generation with this prompt`);
+          }}
         />
       )}
     </div>
