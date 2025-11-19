@@ -15,55 +15,93 @@ if (!existsSync(TEMP_DIR)) {
   mkdirSync(TEMP_DIR, { recursive: true });
 }
 
+interface SceneTrimInfo {
+  id: string;
+  startTrim: number;
+  endTrim: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, sceneIds } = await request.json();
+    const { projectId, scenes } = await request.json();
 
-    if (!projectId || !sceneIds || !Array.isArray(sceneIds) || sceneIds.length === 0) {
+    if (!projectId || !scenes || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json(
-        { error: 'Invalid request: projectId and sceneIds are required' },
+        { error: 'Invalid request: projectId and scenes are required' },
         { status: 400 }
       );
     }
 
-    // Get video file paths
-    const videoPaths: string[] = [];
-    for (const sceneId of sceneIds) {
-      const videoPath = join(VIDEOS_DIR, projectId, `${sceneId}.mp4`);
-      if (existsSync(videoPath)) {
-        videoPaths.push(videoPath);
+    const timestamp = Date.now();
+    const trimmedVideoPaths: string[] = [];
+
+    // Trim each video according to its in/out points
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i] as SceneTrimInfo;
+      const videoPath = join(VIDEOS_DIR, projectId, `${scene.id}.mp4`);
+
+      if (!existsSync(videoPath)) {
+        console.warn(`Video not found: ${videoPath}`);
+        continue;
       }
+
+      const trimmedVideoPath = join(TEMP_DIR, `trimmed-${timestamp}-${i}.mp4`);
+      const duration = scene.endTrim - scene.startTrim;
+
+      // Trim the video using FFmpeg
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(videoPath)
+          .setStartTime(scene.startTrim)
+          .setDuration(duration)
+          .outputOptions([
+            '-c:v libx264',      // Re-encode video
+            '-preset fast',      // Faster encoding
+            '-crf 18',           // High quality
+            '-c:a aac',          // Re-encode audio
+            '-b:a 192k'          // Audio bitrate
+          ])
+          .output(trimmedVideoPath)
+          .on('end', () => {
+            console.log(`Trimmed video ${i + 1}/${scenes.length}`);
+            trimmedVideoPaths.push(trimmedVideoPath);
+            resolve();
+          })
+          .on('error', (err: Error) => {
+            console.error('FFmpeg trim error:', err);
+            reject(err);
+          })
+          .run();
+      });
     }
 
-    if (videoPaths.length === 0) {
+    if (trimmedVideoPaths.length === 0) {
       return NextResponse.json(
         { error: 'No video files found' },
         { status: 404 }
       );
     }
 
-    // Create a temporary file list for FFmpeg concat demuxer
-    const timestamp = Date.now();
+    // Create a file list for FFmpeg concat demuxer
     const listFilePath = join(TEMP_DIR, `concat-list-${timestamp}.txt`);
     const outputFilePath = join(TEMP_DIR, `output-${timestamp}.mp4`);
 
     // Write file list for concat demuxer
-    const fileListContent = videoPaths.map(path => `file '${path}'`).join('\n');
+    const fileListContent = trimmedVideoPaths.map(path => `file '${path}'`).join('\n');
     writeFileSync(listFilePath, fileListContent);
 
-    // Use FFmpeg to concatenate videos
+    // Concatenate the trimmed videos
     await new Promise<void>((resolve, reject) => {
       ffmpeg()
         .input(listFilePath)
         .inputOptions(['-f concat', '-safe 0'])
-        .outputOptions(['-c copy']) // Copy codec for faster processing
+        .outputOptions(['-c copy']) // Copy codec since all videos are already re-encoded consistently
         .output(outputFilePath)
         .on('end', () => {
           console.log('Video concatenation completed');
           resolve();
         })
         .on('error', (err: Error) => {
-          console.error('FFmpeg error:', err);
+          console.error('FFmpeg concat error:', err);
           reject(err);
         })
         .run();
@@ -76,6 +114,14 @@ export async function POST(request: NextRequest) {
     try {
       unlinkSync(listFilePath);
       unlinkSync(outputFilePath);
+      // Clean up trimmed video files
+      for (const trimmedPath of trimmedVideoPaths) {
+        try {
+          unlinkSync(trimmedPath);
+        } catch (err) {
+          console.error('Failed to delete trimmed video:', err);
+        }
+      }
     } catch (err) {
       console.error('Failed to clean up temporary files:', err);
     }

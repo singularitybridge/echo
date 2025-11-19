@@ -9,7 +9,7 @@ import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage, generateImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
 import { evaluateVideo } from '../services/evaluationService.agentHub';
-import { extractFirstFrame, extractLastFrame } from '../services/frameExtractionService';
+import { extractFirstFrame, extractLastFrame, extractFrameByTimestamp } from '../services/frameExtractionService';
 import { CostTracker } from './CostTracker';
 import { videoStorage } from '../services/videoStorage.server';
 import { evaluationStorage } from '../services/evaluationStorage.server';
@@ -24,6 +24,7 @@ import { PlaybackBar } from './PlaybackBar';
 import AssetPickerModal from './assets/AssetPickerModal';
 import EditAssetModal from './assets/EditAssetModal';
 import { StartFrameEditorModal } from './StartFrameEditorModal';
+import { TimelineTrimmer } from './TimelineTrimmer';
 import { AssetLoader } from '../utils/assetLoader';
 import type { Asset } from '@/types/asset';
 import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-models';
@@ -86,6 +87,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [isPlayingAll, setIsPlayingAll] = useState<boolean>(false);
   const [loopEnabled, setLoopEnabled] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [videoPlayerActivated, setVideoPlayerActivated] = useState<boolean>(false); // Track if user has interacted with video
 
   // Default generation settings (aspect ratio is now project-level)
   const [currentSettings, setCurrentSettings] = useState<Omit<GenerationSettings, 'aspectRatio'>>({
@@ -331,7 +334,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             scenes: story.script.scenes,
             createdAt: story.metadata.createdAt,
             updatedAt: story.metadata.updatedAt,
-            tags: story.metadata.tags || [],
             generationMetadata: story.metadata.generationMetadata,
             deletedStoryStorageAssets: story.script.deletedStoryStorageAssets || [],
           };
@@ -344,7 +346,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         // Fallback to legacy API for old projects
         const legacyResponse = await fetch('/api/projects');
         if (!legacyResponse.ok) {
-          setError(`Failed to load projects`);
+          setError({ message: 'Failed to load projects' });
           return;
         }
 
@@ -352,7 +354,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         const projectData = data.projects.find((p: Project) => p.id === projectId);
 
         if (!projectData) {
-          setError(`Project ${projectId} not found`);
+          setError({ message: `Project ${projectId} not found` });
           return;
         }
 
@@ -360,7 +362,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         setSelectedSceneId(projectData.scenes[0]?.id);
       } catch (err) {
         console.error(`Failed to load project ${projectId}:`, err);
-        setError(`Failed to load project ${projectId}`);
+        setError({ message: `Failed to load project ${projectId}` });
       }
     };
 
@@ -509,8 +511,22 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     const timeoutId = setTimeout(async () => {
       try {
-        // Save project using project storage service
-        await projectStorage.saveProject(project);
+        // Save script (scenes + trim points) to story storage API
+        const response = await fetch(`/api/stories/${project.id}/script`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scenes: project.scenes,
+            deletedStoryStorageAssets: project.deletedStoryStorageAssets || [],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save script');
+        }
+
         console.log('Project auto-saved:', project.id);
       } catch (error) {
         console.error('Failed to auto-save project:', error);
@@ -591,6 +607,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const scenes = project?.scenes || [];
   const selectedScene = scenes.find((s) => s.id === selectedSceneId);
 
+  // Reset video player activation when scene changes
+  useEffect(() => {
+    setVideoPlayerActivated(false);
+    setIsPlaying(false);
+  }, [selectedSceneId]);
+
   // Keyboard navigation and playback controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -637,6 +659,79 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             handlePlayAll();
           }
           break;
+        case 'i':
+        case 'I':
+          // Set in point at current time
+          e.preventDefault();
+          if (videoRef.current && selectedScene) {
+            setVideoPlayerActivated(true); // Activate video player
+            const video = videoRef.current;
+            const currentTime = video.currentTime;
+            const endTrim = selectedScene.endTrim ?? selectedScene.duration;
+            const MIN_DURATION = 0.5;
+            const newStart = Math.max(0, Math.min(currentTime, endTrim - MIN_DURATION));
+            handleTrimChange(newStart, endTrim);
+          }
+          break;
+        case 'o':
+        case 'O':
+          // Set out point at current time
+          e.preventDefault();
+          if (videoRef.current && selectedScene) {
+            setVideoPlayerActivated(true); // Activate video player
+            const video = videoRef.current;
+            const currentTime = video.currentTime;
+            const startTrim = selectedScene.startTrim ?? 0;
+            const MIN_DURATION = 0.5;
+            const newEnd = Math.max(startTrim + MIN_DURATION, Math.min(currentTime, selectedScene.duration));
+            handleTrimChange(startTrim, newEnd);
+          }
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (videoRef.current && selectedScene) {
+            const video = videoRef.current;
+
+            // Activate video player for keyboard controls
+            setVideoPlayerActivated(true);
+
+            // Pause video for frame-by-frame scrubbing
+            if (!video.paused) {
+              video.pause();
+              setIsPlaying(false);
+            }
+
+            const startTrim = selectedScene.startTrim ?? 0;
+            const endTrim = selectedScene.endTrim ?? selectedScene.duration;
+            // Single frame = 1/30s, or 10 frames with Ctrl/Alt
+            const frameStep = (e.ctrlKey || e.altKey || e.metaKey) ? 0.333 : 0.033;
+            const newTime = Math.max(startTrim, video.currentTime - frameStep);
+            video.currentTime = newTime;
+            setCurrentTime(newTime);
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (videoRef.current && selectedScene) {
+            const video = videoRef.current;
+
+            // Activate video player for keyboard controls
+            setVideoPlayerActivated(true);
+
+            // Pause video for frame-by-frame scrubbing
+            if (!video.paused) {
+              video.pause();
+              setIsPlaying(false);
+            }
+
+            const endTrim = selectedScene.endTrim ?? selectedScene.duration;
+            // Single frame = 1/30s, or 10 frames with Ctrl/Alt
+            const frameStep = (e.ctrlKey || e.altKey || e.metaKey) ? 0.333 : 0.033;
+            const newTime = Math.min(endTrim, video.currentTime + frameStep);
+            video.currentTime = newTime;
+            setCurrentTime(newTime);
+          }
+          break;
         case 'ArrowDown':
           e.preventDefault();
           if (currentIndex < scenes.length - 1) {
@@ -651,14 +746,22 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           break;
         case 'Home':
           e.preventDefault();
-          if (scenes.length > 0) {
-            setSelectedSceneId(scenes[0].id);
+          if (videoRef.current && selectedScene) {
+            setVideoPlayerActivated(true); // Activate video player
+            const video = videoRef.current;
+            const startTrim = selectedScene.startTrim ?? 0;
+            video.currentTime = startTrim;
+            setCurrentTime(startTrim);
           }
           break;
         case 'End':
           e.preventDefault();
-          if (scenes.length > 0) {
-            setSelectedSceneId(scenes[scenes.length - 1].id);
+          if (videoRef.current && selectedScene) {
+            setVideoPlayerActivated(true); // Activate video player
+            const video = videoRef.current;
+            const endTrim = selectedScene.endTrim ?? selectedScene.duration;
+            video.currentTime = endTrim;
+            setCurrentTime(endTrim);
           }
           break;
       }
@@ -666,35 +769,94 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [scenes, selectedSceneId, showRefsModal, showRefSelectModal, showProjectSettings, showKeyboardShortcuts, isPlaying, isPlayingAll]);
+  }, [scenes, selectedSceneId, selectedScene, showRefsModal, showRefSelectModal, showProjectSettings, showKeyboardShortcuts, isPlaying, isPlayingAll]);
 
   /**
-   * Build a proper Veo 3.1 prompt with dialogue syntax
-   * Format: visual description + dialogue with proper syntax + camera info
+   * Build a proper Veo 3.1 prompt using 3-part structure:
+   * 1. Camera (shot type, lens, movement)
+   * 2. Direction (action, performance, movement)
+   * 3. Speech (dialogue only)
+   *
+   * With reference images: Skip visual description (already in image)
+   * Without references: Include full visual description
    */
-  const buildVeoPrompt = (scene: Scene): string => {
-    let prompt = scene.prompt;
+  const buildVeoPrompt = (scene: Scene, hasReferenceImages: boolean = false): string => {
+    const isRobot = /robot/i.test(scene.prompt);
+    const isMechanical = /robot|mechanical|servo|machine/i.test(scene.prompt);
 
-    // Add voiceover as dialogue if present
-    if (scene.voiceover && scene.voiceover.trim()) {
-      // Veo 3.1 requires dialogue in specific format: A woman says, "dialogue here" (no subtitles)
-      // Keep dialogue concise (12-25 words max for 8 second clips)
-      const dialogue = scene.voiceover.trim();
-      prompt += `. A woman says, "${dialogue}" (no subtitles)`;
+    if (hasReferenceImages) {
+      // Reference image mode: 3-part structure
+      const parts: string[] = [];
+
+      // Part 1: Camera (cinematographer instructions)
+      if (scene.cameraAngle) {
+        parts.push(scene.cameraAngle);
+      }
+
+      // Part 2 & 3: Parse voiceover to separate direction from speech
+      if (scene.voiceover && scene.voiceover.trim()) {
+        const voiceover = scene.voiceover.trim();
+
+        // Extract quoted speech (anything in "quotes")
+        const speechMatch = voiceover.match(/"([^"]+)"/);
+        const speech = speechMatch ? speechMatch[1] : null;
+
+        // Remove speech quotes to get pure direction/action
+        const direction = voiceover
+          .replace(/"[^"]+"/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/\.\s*$/, ''); // Remove trailing period
+
+        // Part 2: Direction (what the subject does)
+        if (direction) {
+          parts.push(direction);
+        }
+
+        // Part 3: Speech (just the dialogue)
+        if (speech) {
+          parts.push(`"${speech}"`);
+        }
+      }
+
+      // Add prohibitions for mechanical subjects
+      if (isMechanical) {
+        parts.push("No human figures, no human hands, no human body parts");
+      }
+
+      return parts.join('. ');
+    } else {
+      // Text-to-video mode: Include visual description
+      const parts: string[] = [];
+
+      // Start with visual description
+      parts.push(scene.prompt);
+
+      // Add voiceover (combined direction + speech for text-to-video)
+      if (scene.voiceover && scene.voiceover.trim()) {
+        parts.push(scene.voiceover.trim());
+      }
+
+      // Add camera
+      if (scene.cameraAngle) {
+        parts.push(scene.cameraAngle);
+      }
+
+      // Add prohibitions
+      if (isMechanical) {
+        parts.push("No human figures, no human hands, no human body parts");
+      }
+
+      return parts.join('. ');
     }
-
-    // Add camera angle
-    if (scene.cameraAngle) {
-      prompt += `. ${scene.cameraAngle}`;
-    }
-
-    return prompt;
   };
 
   const handleCopyPrompt = async () => {
     if (!selectedScene) return;
 
-    const veoPrompt = buildVeoPrompt(selectedScene);
+    // Determine if we have reference images for this scene
+    const hasRefs = (selectedScene.attachedAssets && selectedScene.attachedAssets.length > 0) || characterRefs.length > 0;
+    const veoPrompt = buildVeoPrompt(selectedScene, hasRefs);
 
     try {
       await navigator.clipboard.writeText(veoPrompt);
@@ -707,14 +869,24 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
   // Playback control functions
   const handlePlayPause = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !selectedScene) return;
+
+    const video = videoRef.current;
+    const startTrim = selectedScene.startTrim ?? 0;
+    const endTrim = selectedScene.endTrim ?? selectedScene.duration;
 
     if (isPlaying) {
-      videoRef.current.pause();
+      video.pause();
       setIsPlaying(false);
     } else {
-      videoRef.current.play();
+      // If we're at or past the end, or before the start, jump to start trim
+      if (video.currentTime >= endTrim || video.currentTime < startTrim) {
+        video.currentTime = startTrim;
+        setCurrentTime(startTrim);
+      }
+      video.play();
       setIsPlaying(true);
+      setVideoPlayerActivated(true); // Mark video as activated
     }
   };
 
@@ -728,9 +900,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   };
 
   const handleStop = () => {
-    if (videoRef.current) {
+    if (videoRef.current && selectedScene) {
+      const startTrim = selectedScene.startTrim ?? 0;
       videoRef.current.pause();
-      videoRef.current.currentTime = 0;
+      videoRef.current.currentTime = startTrim;
+      setCurrentTime(startTrim);
     }
     setIsPlaying(false);
     setIsPlayingAll(false);
@@ -738,6 +912,89 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
   const handleToggleLoop = () => {
     setLoopEnabled(!loopEnabled);
+  };
+
+  // Handle trim changes from timeline
+  const handleTrimChange = async (startTrim: number, endTrim: number) => {
+    if (!selectedScene || !project) return;
+
+    // Capture scene properties before state update (to avoid stale closure)
+    const sceneId = selectedScene.id;
+    const sceneDuration = selectedScene.duration;
+    const sceneGenerated = selectedScene.generated;
+    const sceneVideoUrl = selectedScene.videoUrl;
+    const oldEndTrim = selectedScene.endTrim ?? sceneDuration;
+    const endTrimChanged = Math.abs(endTrim - oldEndTrim) > 0.01; // Use small epsilon for float comparison
+
+    // Update trim points in project state
+    setProject((prevProject) => {
+      if (!prevProject) return prevProject;
+
+      return {
+        ...prevProject,
+        scenes: prevProject.scenes.map((scene) =>
+          scene.id === sceneId
+            ? { ...scene, startTrim, endTrim }
+            : scene
+        ),
+      };
+    });
+
+    // Re-extract last frame if endTrim changed and video is already generated
+    if (endTrimChanged && sceneGenerated && sceneVideoUrl) {
+      try {
+        console.log(`Re-extracting last frame at new out point: ${endTrim}s`);
+
+        // Extract frame at new endTrim point
+        const lastFrameDataUrl = endTrim < sceneDuration
+          ? await extractFrameByTimestamp(projectId, sceneId, endTrim)
+          : await extractLastFrame(projectId, sceneId);
+
+        // Save last frame as file
+        const lastFrameUrl = await frameStorage.saveFrame(
+          projectId,
+          sceneId,
+          'last',
+          lastFrameDataUrl
+        );
+
+        console.log('Updated last frame for shot continuity:', lastFrameUrl);
+
+        // Update scene with new last frame URL
+        setProject((prevProject) => {
+          if (!prevProject) return prevProject;
+
+          return {
+            ...prevProject,
+            scenes: prevProject.scenes.map((scene) =>
+              scene.id === sceneId
+                ? { ...scene, lastFrameUrl }
+                : scene
+            ),
+          };
+        });
+      } catch (error) {
+        console.error('Failed to re-extract last frame:', error);
+      }
+    }
+  };
+
+  // Handle seek from timeline
+  const handleSeek = (time: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  // Handle pause from timeline (for drag preview)
+  const handlePause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.pause();
+    setIsPlaying(false);
   };
 
   // Reload video when videoUrl changes
@@ -748,6 +1005,32 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     // Force reload the video source
     video.load();
   }, [selectedScene?.videoUrl]);
+
+  // Track video currentTime for timeline trimmer and enforce trim boundaries
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !selectedScene) return;
+
+    const endTrim = selectedScene.endTrim ?? selectedScene.duration;
+
+    const handleTimeUpdate = () => {
+      const currentTime = video.currentTime;
+      setCurrentTime(currentTime);
+
+      // Stop playback if we've passed the out point
+      if (currentTime >= endTrim) {
+        video.pause();
+        video.currentTime = endTrim;
+        setIsPlaying(false);
+        setCurrentTime(endTrim);
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+    };
+  }, [selectedScene?.videoUrl, selectedScene?.endTrim, selectedScene?.duration]); // Re-attach when video or trim points change
 
   // Handle video ended event for Play All feature
   useEffect(() => {
@@ -800,10 +1083,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     setError(null);
 
     try {
-      // Build proper prompt with dialogue syntax for Veo 3.1
-      const veoPrompt = buildVeoPrompt(scene);
-      console.log('Generated Veo prompt:', veoPrompt);
-
       // Get previous scene's last frame for shot continuity or use selected reference
       const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
       let startFrameDataUrl: string | undefined;
@@ -909,6 +1188,14 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         }
       }
 
+      // Build proper prompt AFTER determining if we have references
+      // With references: focus on action/motion/camera (skip visual description)
+      // Without references: include full visual description
+      const hasReferenceImages = !!selectedRefs || !!startFrameDataUrl;
+      const veoPrompt = buildVeoPrompt(scene, hasReferenceImages);
+      console.log('Generated Veo prompt:', veoPrompt);
+      console.log('Using reference images:', hasReferenceImages);
+
       // Generate video with optional start frame for continuity
       // If startFrame is provided, it takes priority over character references
       // Use project-level aspect ratio
@@ -948,9 +1235,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         firstFrameUrl = await frameStorage.saveFrame(projectId, sceneId, 'first', firstFrameDataUrl);
         console.log('Saved first frame to file:', firstFrameUrl);
 
-        // Extract EXACT last frame using server-side FFmpeg
-        const lastFrameDataUrl = await extractLastFrame(projectId, sceneId);
-        console.log('Extracted last frame using server-side FFmpeg for shot continuity');
+        // Extract frame at endTrim point (or last frame if no trim) using server-side FFmpeg
+        const endTrim = scene.endTrim ?? scene.duration;
+        const lastFrameDataUrl = endTrim < scene.duration
+          ? await extractFrameByTimestamp(projectId, sceneId, endTrim)
+          : await extractLastFrame(projectId, sceneId);
+        console.log(`Extracted frame at ${endTrim}s for shot continuity`);
 
         // Save last frame as file instead of storing base64 in JSON
         lastFrameUrl = await frameStorage.saveFrame(projectId, sceneId, 'last', lastFrameDataUrl);
@@ -1021,10 +1311,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     setError(null);
 
     try {
-      // Build proper prompt with dialogue syntax
-      const veoPrompt = buildVeoPrompt(scene);
-      console.log('Generated Veo prompt:', veoPrompt);
-
       // Get previous scene's last frame for shot continuity or use selected reference
       const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
       let startFrameDataUrl: string | undefined;
@@ -1114,6 +1400,14 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         selectedRefs = availableRefs.length > 0 ? availableRefs : undefined;
       }
 
+      // Build proper prompt AFTER determining if we have references
+      // With references: focus on action/motion/camera (skip visual description)
+      // Without references: include full visual description
+      const hasReferenceImages = !!selectedRefs || !!startFrameDataUrl;
+      const veoPrompt = buildVeoPrompt(scene, hasReferenceImages);
+      console.log('Generated Veo prompt:', veoPrompt);
+      console.log('Using reference images:', hasReferenceImages);
+
       // Prepare reference images for API call
       const referenceImages = selectedRefs?.map(ref => ({
         base64: ref.imageBytes,
@@ -1180,9 +1474,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     } catch (err) {
       console.error('Multi-model video generation failed:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to generate videos'
-      );
+      setError({
+        message: err instanceof Error ? err.message : 'Failed to generate videos'
+      });
     } finally {
       // Remove from generating set
       setGeneratingSceneIds((prev) => {
@@ -1199,6 +1493,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const handleSelectVideoResult = async (result: VideoGenerationResult) => {
     if (!selectedSceneId || !result.blob) return;
 
+    // Find the scene to get trim settings
+    const scene = scenes.find((s) => s.id === selectedSceneId);
+    if (!scene) return;
+
     setShowVideoResultModal(false);
 
     try {
@@ -1214,10 +1512,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         const firstFrameDataUrl = await extractFirstFrame(projectId, selectedSceneId);
         firstFrameUrl = await frameStorage.saveFrame(projectId, selectedSceneId, 'first', firstFrameDataUrl);
 
-        const lastFrameDataUrl = await extractLastFrame(projectId, selectedSceneId);
+        // Extract frame at endTrim point (or last frame if no trim) using server-side FFmpeg
+        const endTrim = scene.endTrim ?? scene.duration;
+        const lastFrameDataUrl = endTrim < scene.duration
+          ? await extractFrameByTimestamp(projectId, selectedSceneId, endTrim)
+          : await extractLastFrame(projectId, selectedSceneId);
+
         lastFrameUrl = await frameStorage.saveFrame(projectId, selectedSceneId, 'last', lastFrameDataUrl);
 
-        console.log('Extracted and saved frames for selected video');
+        console.log(`Extracted and saved frames for selected video (endTrim: ${endTrim}s)`);
       } catch (frameErr) {
         console.error('Failed to extract frames:', frameErr);
       }
@@ -1253,7 +1556,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       setVideoResults([]);
     } catch (err) {
       console.error('Failed to save selected video:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save video');
+      setError({ message: err instanceof Error ? err.message : 'Failed to save video' });
     }
   };
 
@@ -1302,9 +1605,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       });
     } catch (err) {
       console.error('Video evaluation failed:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to evaluate video'
-      );
+      setError({
+        message: err instanceof Error ? err.message : 'Failed to evaluate video'
+      });
     } finally {
       // Remove from evaluating set
       setEvaluatingSceneIds((prev) => {
@@ -1322,7 +1625,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     const scenesWithVideos = project.scenes.filter(s => s.generated && s.videoUrl);
 
     if (scenesWithVideos.length === 0) {
-      setError('No generated videos to export');
+      setError({ message: 'No generated videos to export' });
       return;
     }
 
@@ -1337,7 +1640,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         },
         body: JSON.stringify({
           projectId: project.id,
-          sceneIds: scenesWithVideos.map(s => s.id),
+          scenes: scenesWithVideos.map(s => ({
+            id: s.id,
+            startTrim: s.startTrim ?? 0,
+            endTrim: s.endTrim ?? s.duration,
+          })),
         }),
       });
 
@@ -1361,7 +1668,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       console.log('Video exported successfully');
     } catch (err) {
       console.error('Video export failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to export video');
+      setError({ message: err instanceof Error ? err.message : 'Failed to export video' });
     } finally {
       setIsExporting(false);
     }
@@ -1398,7 +1705,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       window.location.href = '/';
     } catch (err) {
       console.error('Story deletion failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete story');
+      setError({ message: err instanceof Error ? err.message : 'Failed to delete story' });
       setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
@@ -1432,15 +1739,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           ),
         };
         setProject(updatedProject);
-
-        // Also update selectedScene to reflect changes immediately
-        setSelectedScene({ ...selectedScene, attachedAssets: attachments });
       }
 
       console.log('Asset attachments saved successfully');
     } catch (err) {
       console.error('Failed to save asset attachments:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save asset attachments');
+      setError({ message: err instanceof Error ? err.message : 'Failed to save asset attachments' });
     }
   };
 
@@ -1629,12 +1933,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                         {isReference ? (
                           <ImageIcon
                             className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-indigo-500'}`}
-                            title={`Asset ${currentRef}`}
                           />
                         ) : (
                           <Film
                             className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-purple-200' : 'text-purple-500'}`}
-                            title="Continue from previous shot"
                           />
                         )}
                       </div>
@@ -1730,8 +2032,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
                     return (
                       <>
-                        {/* Start frame preview - shown when not playing and available */}
-                        {startFrameUrl && !isPlaying && (
+                        {/* Start frame preview - shown when video player hasn't been activated yet */}
+                        {startFrameUrl && !videoPlayerActivated && (
                           <img
                             src={startFrameUrl}
                             alt="Start frame preview"
@@ -1739,12 +2041,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                           />
                         )}
 
-                        {/* Video player - hidden when showing start frame */}
+                        {/* Video player - hidden when showing start frame, visible once user interacts */}
                         <video
                           ref={videoRef}
                           key={selectedScene.videoUrl}
                           className={`max-h-full max-w-full rounded-lg shadow-2xl ${
-                            startFrameUrl && !isPlaying ? 'hidden' : ''
+                            startFrameUrl && !videoPlayerActivated ? 'hidden' : ''
                           }`}
                         >
                           <source src={selectedScene.videoUrl} type="video/mp4" />
@@ -1825,6 +2127,22 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* Timeline Trimmer - shown when video exists */}
+              {selectedScene.videoUrl && !generatingSceneIds.has(selectedScene.id) && (
+                <div className="px-4 pb-4">
+                  <TimelineTrimmer
+                    duration={selectedScene.duration}
+                    startTrim={selectedScene.startTrim ?? 0}
+                    endTrim={selectedScene.endTrim ?? selectedScene.duration}
+                    currentTime={currentTime}
+                    onTrimChange={handleTrimChange}
+                    onSeek={handleSeek}
+                    onPause={handlePause}
+                    disabled={false}
+                  />
                 </div>
               )}
             </div>
@@ -2549,23 +2867,33 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           isOpen={showRefsModal}
           onClose={() => setShowRefsModal(false)}
           story={{
-            title: project.title,
-            description: project.description,
-            type: project.type,
-            character: project.character,
+            projectMetadata: {
+              title: project.title,
+              description: project.description,
+              type: project.type as 'short',
+              character: typeof project.character === 'string' ? project.character : (project.character as any).name,
+              aspectRatio: '9:16' as const,
+              defaultModel: 'Veo 3.1' as const,
+              defaultResolution: '720p' as const,
+            },
             scenes: project.scenes.map(s => ({
-              sceneNumber: parseInt(s.id.split('-')[1]) || 1,
+              id: s.id,
               title: s.title,
               duration: s.duration,
-              visualPrompt: s.prompt,
+              prompt: s.prompt,
               voiceover: s.voiceover || '',
               cameraAngle: s.cameraAngle,
+              generated: s.generated,
+              settings: {
+                model: 'Veo 3.1' as const,
+                resolution: (s.settings?.resolution || '720p') as '720p' | '1080p',
+                isLooping: s.settings?.isLooping || false,
+              },
             })),
           }}
           projectId={projectId}
           onCharacterRefsGenerated={async (refUrls) => {
-            // Reload character references after generation
-            await loadCharacterReferences();
+            // Character refs will be reloaded automatically via useEffect when project updates
           }}
         />
       )}
@@ -2826,7 +3154,6 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             setAssetToEdit(null);
           }}
           asset={assetToEdit}
-          projectId={projectId}
           onEditComplete={async () => {
             // Reload combined refs after editing
             setShowEditAssetModal(false);
@@ -2834,16 +3161,41 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
             // Reload assets from the AssetLoader
             try {
-              const assetLoader = new AssetLoader(projectId);
-              const loadedAssets = await assetLoader.loadAssets();
-              const assetRefs = loadedAssets.map((asset: any) => ({
-                objectUrl: asset.url,
-                width: asset.width || 1024,
-                height: asset.height || 1792,
-              }));
+              const loadedAssets = await AssetLoader.loadProjectAssets(projectId);
+              const assetRefs = AssetLoader.assetsToAssetReferences(loadedAssets);
+
+              // Convert to full GeneratedImage format
+              const refs: GeneratedImage[] = [];
+              for (const ref of assetRefs) {
+                try {
+                  const response = await fetch(ref.objectUrl);
+                  if (response.ok) {
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const reader = new FileReader();
+                    const base64Promise = new Promise<string>((resolve) => {
+                      reader.onloadend = () => {
+                        const base64 = reader.result as string;
+                        resolve(base64.split(',')[1]);
+                      };
+                      reader.readAsDataURL(blob);
+                    });
+                    const imageBytes = await base64Promise;
+                    refs.push({
+                      imageBytes,
+                      mimeType: 'image/png',
+                      objectUrl,
+                      blob,
+                      assetId: ref.id,
+                    });
+                  }
+                } catch (err) {
+                  console.log(`Failed to load ref: ${ref.objectUrl}`, err);
+                }
+              }
 
               // Combine with existing character refs
-              setCombinedRefs([...assetRefs, ...characterRefs]);
+              setCombinedRefs([...refs, ...characterRefs]);
             } catch (error) {
               console.error('Failed to reload assets:', error);
             }
@@ -3236,11 +3588,22 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   const response = await fetch(assetRef.objectUrl);
                   if (response.ok) {
                     const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const reader = new FileReader();
+                    const base64Promise = new Promise<string>((resolve) => {
+                      reader.onloadend = () => {
+                        const base64 = reader.result as string;
+                        resolve(base64.split(',')[1]);
+                      };
+                      reader.readAsDataURL(blob);
+                    });
+                    const imageBytes = await base64Promise;
                     newAssetImages.push({
-                      objectUrl: assetRef.objectUrl,
+                      imageBytes,
+                      mimeType: 'image/png',
+                      objectUrl,
                       blob,
-                      width: 1024,
-                      height: 1792,
+                      assetId: assetRef.id,
                     });
                   }
                 } catch (error) {

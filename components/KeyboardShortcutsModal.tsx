@@ -8,20 +8,30 @@ import { X, Keyboard } from 'lucide-react';
 interface KeyboardShortcut {
   keys: string[];
   description: string;
-  category: 'Navigation' | 'Playback' | 'General';
+  category: 'Navigation' | 'Playback' | 'Timeline' | 'General';
 }
 
 const shortcuts: KeyboardShortcut[] = [
   // Navigation
   { keys: ['↓'], description: 'Next scene', category: 'Navigation' },
   { keys: ['↑'], description: 'Previous scene', category: 'Navigation' },
-  { keys: ['Home'], description: 'First scene', category: 'Navigation' },
-  { keys: ['End'], description: 'Last scene', category: 'Navigation' },
 
   // Playback
   { keys: ['Space'], description: 'Play / Pause current scene', category: 'Playback' },
   { keys: ['Shift', 'Enter'], description: 'Play all scenes from current', category: 'Playback' },
   { keys: ['Esc'], description: 'Stop playback', category: 'Playback' },
+
+  // Timeline
+  { keys: ['I'], description: 'Set in point at current time', category: 'Timeline' },
+  { keys: ['O'], description: 'Set out point at current time', category: 'Timeline' },
+  { keys: ['←'], description: 'Previous frame (1/30s)', category: 'Timeline' },
+  { keys: ['→'], description: 'Next frame (1/30s)', category: 'Timeline' },
+  { keys: ['Ctrl', '←'], description: 'Jump back 10 frames', category: 'Timeline' },
+  { keys: ['Ctrl', '→'], description: 'Jump forward 10 frames', category: 'Timeline' },
+  { keys: ['Alt', '←'], description: 'Jump back 10 frames', category: 'Timeline' },
+  { keys: ['Alt', '→'], description: 'Jump forward 10 frames', category: 'Timeline' },
+  { keys: ['Home'], description: 'Jump to first frame (in point)', category: 'Timeline' },
+  { keys: ['End'], description: 'Jump to last frame (out point)', category: 'Timeline' },
 
   // General
   { keys: ['?'], description: 'Show keyboard shortcuts', category: 'General' },
