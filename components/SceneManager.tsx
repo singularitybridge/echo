@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp, Ban } from 'lucide-react';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage, generateImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
@@ -18,6 +18,7 @@ import { frameStorage } from '../services/frameStorage.server';
 import { Project, Scene, GenerationSettings, SceneAssetAttachment } from '../types/project';
 import CharacterDesignChatModal from './CharacterDesignChatModal';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
+import { EndFrameSelectionModal } from './EndFrameSelectionModal';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { PlaybackBar } from './PlaybackBar';
@@ -55,6 +56,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [evaluationExpanded, setEvaluationExpanded] = useState<boolean>(true);
   const [showRefsModal, setShowRefsModal] = useState<boolean>(false);
   const [showRefSelectModal, setShowRefSelectModal] = useState<boolean>(false);
+  const [showEndFrameModal, setShowEndFrameModal] = useState<boolean>(false);
   const [showProjectSettings, setShowProjectSettings] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [showAssetPicker, setShowAssetPicker] = useState<boolean>(false);
@@ -63,6 +65,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [showScriptPreview, setShowScriptPreview] = useState<boolean>(false);
   const [showEditAssetModal, setShowEditAssetModal] = useState<boolean>(false);
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
+  const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
   const [showStartFrameEditor, setShowStartFrameEditor] = useState<boolean>(false);
   const [startFrameEditorMode, setStartFrameEditorMode] = useState<'generate' | 'edit'>('generate');
 
@@ -440,6 +443,27 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     loadCharacterRefs();
   }, [projectId, project?.aspectRatio]);
 
+  // Load available assets for end frame selection
+  useEffect(() => {
+    if (!projectId) return;
+
+    const loadAssets = async () => {
+      try {
+        const response = await fetch(`/api/assets?projectId=${projectId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableAssets(data.assets || []);
+          console.log(`Loaded ${data.assets?.length || 0} available assets for project`);
+        }
+      } catch (error) {
+        console.error('Failed to load available assets:', error);
+        setAvailableAssets([]);
+      }
+    };
+
+    loadAssets();
+  }, [projectId]);
+
   // Load combined references (assets + character refs) when scene changes
   useEffect(() => {
     const loadCombinedRefs = async () => {
@@ -635,6 +659,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           setShowRefsModal(false);
         } else if (showRefSelectModal) {
           setShowRefSelectModal(false);
+        } else if (showEndFrameModal) {
+          setShowEndFrameModal(false);
         } else if (showProjectSettings) {
           setShowProjectSettings(false);
         } else if (isPlaying || isPlayingAll) {
@@ -644,7 +670,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       }
 
       // Don't handle other keys if modals are open
-      if (showRefsModal || showRefSelectModal || showProjectSettings || showKeyboardShortcuts) return;
+      if (showRefsModal || showRefSelectModal || showEndFrameModal || showProjectSettings || showKeyboardShortcuts) return;
 
       const currentIndex = scenes.findIndex(s => s.id === selectedSceneId);
 
@@ -769,7 +795,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [scenes, selectedSceneId, selectedScene, showRefsModal, showRefSelectModal, showProjectSettings, showKeyboardShortcuts, isPlaying, isPlayingAll]);
+  }, [scenes, selectedSceneId, selectedScene, showRefsModal, showRefSelectModal, showEndFrameModal, showProjectSettings, showKeyboardShortcuts, isPlaying, isPlayingAll]);
 
   /**
    * Build a proper Veo 3.1 prompt using 3-part structure:
@@ -1021,8 +1047,29 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       if (currentTime >= endTrim) {
         video.pause();
         video.currentTime = endTrim;
-        setIsPlaying(false);
         setCurrentTime(endTrim);
+
+        // Handle Play All progression when hitting trim point
+        if (isPlayingAll) {
+          const currentIndex = scenes.findIndex(s => s.id === selectedScene.id);
+
+          if (currentIndex < scenes.length - 1) {
+            const nextScene = scenes[currentIndex + 1];
+            if (nextScene.generated && nextScene.videoUrl) {
+              setSelectedSceneId(nextScene.id);
+              // Don't set isPlaying to false - let the next scene auto-play
+            } else {
+              setIsPlayingAll(false);
+              setIsPlaying(false);
+            }
+          } else {
+            setIsPlayingAll(false);
+            setIsPlaying(false);
+          }
+        } else {
+          // Only set isPlaying to false if we're not in Play All mode
+          setIsPlaying(false);
+        }
       }
     };
 
@@ -1030,7 +1077,61 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [selectedScene?.videoUrl, selectedScene?.endTrim, selectedScene?.duration]); // Re-attach when video or trim points change
+  }, [selectedScene?.videoUrl, selectedScene?.endTrim, selectedScene?.duration, isPlayingAll, scenes, selectedScene?.id]); // Re-attach when video or trim points change
+
+  // Auto-play video when scene changes during Play All mode
+  useEffect(() => {
+    if (!isPlayingAll) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let hasPlayed = false; // Flag to prevent duplicate play calls
+
+    const attemptPlay = () => {
+      if (hasPlayed) return;
+
+      hasPlayed = true;
+
+      // Activate video player to show video element instead of start frame image
+      setVideoPlayerActivated(true);
+
+      video.play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch((error) => {
+          console.error('Play All: Failed to auto-play video:', error);
+          setIsPlayingAll(false);
+        });
+    };
+
+    const handleCanPlay = () => attemptPlay();
+    const handleLoadedData = () => {
+      if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+        attemptPlay();
+      }
+    };
+
+    // Force reload the video source if it's empty
+    if (!video.src && !video.currentSrc) {
+      video.load();
+    }
+
+    // If video is already ready, play immediately
+    if (video.readyState >= 3) { // HAVE_FUTURE_DATA or higher
+      attemptPlay();
+    } else {
+      // Otherwise wait for video to be ready
+      video.addEventListener('canplay', handleCanPlay, { once: true });
+      video.addEventListener('loadeddata', handleLoadedData, { once: true });
+
+      return () => {
+        video.removeEventListener('canplay', handleCanPlay);
+        video.removeEventListener('loadeddata', handleLoadedData);
+      };
+    }
+  }, [isPlayingAll, selectedSceneId, selectedScene?.videoUrl]);
 
   // Handle video ended event for Play All feature
   useEffect(() => {
@@ -1043,17 +1144,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       if (isPlayingAll) {
         // Move to next scene if available
         const currentIndex = scenes.findIndex(s => s.id === selectedSceneId);
+
         if (currentIndex < scenes.length - 1) {
           const nextScene = scenes[currentIndex + 1];
+
           if (nextScene.generated && nextScene.videoUrl) {
             setSelectedSceneId(nextScene.id);
-            // Video will auto-play when scene changes due to key change
-            setTimeout(() => {
-              if (videoRef.current) {
-                videoRef.current.play();
-                setIsPlaying(true);
-              }
-            }, 100);
+            // Auto-play will be handled by the useEffect above
           } else {
             // Stop if next scene has no video
             setIsPlayingAll(false);
@@ -1196,8 +1293,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       console.log('Generated Veo prompt:', veoPrompt);
       console.log('Using reference images:', hasReferenceImages);
 
-      // Generate video with optional start frame for continuity
+      // Get end frame URL if specified
+      const endFrameDataUrl = scene.endFrameUrl;
+      if (endFrameDataUrl) {
+        console.log('Using end frame for transition:', endFrameDataUrl);
+      }
+
+      // Generate video with optional start/end frames
       // If startFrame is provided, it takes priority over character references
+      // If endFrame is provided, it creates a transition to that target frame
       // Use project-level aspect ratio
       const sceneSettings: GenerationSettings = {
         ...currentSettings,
@@ -1208,7 +1312,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         veoPrompt,
         selectedRefs,
         sceneSettings,
-        startFrameDataUrl
+        startFrameDataUrl,
+        endFrameDataUrl
       );
 
       // Save video to server FIRST for persistence and get the server URL
@@ -1408,6 +1513,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       console.log('Generated Veo prompt:', veoPrompt);
       console.log('Using reference images:', hasReferenceImages);
 
+      // Get end frame URL if specified
+      const endFrameDataUrl = scene.endFrameUrl;
+      if (endFrameDataUrl) {
+        console.log('Using end frame for transition (multi-model):', endFrameDataUrl);
+      }
+
       // Prepare reference images for API call
       const referenceImages = selectedRefs?.map(ref => ({
         base64: ref.imageBytes,
@@ -1425,6 +1536,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           resolution: currentSettings.resolution === Resolution.P1080 ? '1080p' : '720p',
           referenceImages,
           startFrameDataUrl,
+          endFrameDataUrl,
         }),
       });
 
@@ -2459,6 +2571,81 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 </div>
               </div>
 
+              {/* End Frame Selection */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-700 mb-2">End Frame</label>
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-3">
+                  {(() => {
+                    const endFrameMode = selectedScene.endFrameMode ?? 'none';
+                    const nextSceneIndex = sceneIndex + 1;
+                    const nextScene = nextSceneIndex < scenes.length ? scenes[nextSceneIndex] : undefined;
+
+                    // Get the image URL based on end frame mode
+                    let imageUrl: string | undefined;
+                    let label: string = 'None';
+                    let icon: React.ReactNode = <Ban size={16} className="text-gray-400 flex-shrink-0" />;
+
+                    if (endFrameMode === 'asset' && selectedScene.endFrameAssetId) {
+                      // Find the asset
+                      const asset = availableAssets.find(a => a.id === selectedScene.endFrameAssetId);
+                      if (asset) {
+                        imageUrl = asset.url;
+                        label = asset.name;
+                        icon = <ImageIcon size={16} className="text-indigo-600 flex-shrink-0" />;
+                      }
+                    } else if (endFrameMode === 'next-shot' && nextScene?.firstFrameUrl) {
+                      imageUrl = nextScene.firstFrameUrl;
+                      label = 'Next Shot';
+                      icon = <Film size={16} className="text-indigo-600 flex-shrink-0" />;
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Thumbnail and Info */}
+                        <div className="flex items-center gap-3">
+                          {/* Thumbnail */}
+                          <div className="w-16 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 border border-gray-200">
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt="End frame"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                <Ban size={24} className="text-gray-300" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Label */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {icon}
+                              <span className="text-sm font-medium text-gray-900">{label}</span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {endFrameMode === 'none' && 'Free generation'}
+                              {endFrameMode === 'asset' && 'Target end frame'}
+                              {endFrameMode === 'next-shot' && nextScene && `"${nextScene.title}"`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Action Button */}
+                        <button
+                          onClick={() => setShowEndFrameModal(true)}
+                          className="w-full px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
+                        >
+                          <ImagePlus size={14} />
+                          <span>Change</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
             {/* Settings Panel */}
             {showSettings && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
@@ -3076,6 +3263,84 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             })()
           }
           projectId={projectId}
+        />
+      )}
+
+      {/* End Frame Selection Modal */}
+      {selectedScene && (
+        <EndFrameSelectionModal
+          isOpen={showEndFrameModal}
+          onClose={() => setShowEndFrameModal(false)}
+          availableAssets={availableAssets}
+          selectedEndFrame={selectedScene.endFrameMode ?? 'none'}
+          selectedAssetId={selectedScene.endFrameAssetId}
+          onSelectEndFrame={async (mode, assetId) => {
+            // Get the end frame URL based on the selected mode
+            let endFrameUrl: string | undefined = undefined;
+
+            if (mode === 'asset' && assetId) {
+              // Fetch the asset URL
+              try {
+                const response = await fetch(`/api/assets/${assetId}`);
+                if (response.ok) {
+                  const asset = await response.json();
+                  endFrameUrl = asset.url;
+                  console.log('✅ End frame asset fetched:', { assetId, url: asset.url });
+                }
+              } catch (error) {
+                console.error('❌ Failed to fetch end frame asset:', error);
+              }
+            } else if (mode === 'next-shot') {
+              // Use the next scene's first frame
+              const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+              const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : undefined;
+              if (nextScene?.firstFrameUrl) {
+                endFrameUrl = nextScene.firstFrameUrl;
+                console.log('✅ Using next shot first frame:', { sceneId: nextScene.id, url: endFrameUrl });
+              }
+            }
+
+            // Update the scene with the selected end frame
+            setProject((prevProject) => {
+              if (!prevProject) return prevProject;
+
+              return {
+                ...prevProject,
+                scenes: prevProject.scenes.map((s) =>
+                  s.id === selectedScene.id
+                    ? {
+                        ...s,
+                        endFrameMode: mode,
+                        endFrameAssetId: mode === 'asset' ? assetId : undefined,
+                        endFrameUrl: endFrameUrl,
+                      }
+                    : s
+                ),
+              };
+            });
+
+            console.log('💾 End frame selection saved:', { mode, assetId, endFrameUrl });
+          }}
+          nextSceneTitle={
+            (() => {
+              const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+              return sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1].title : undefined;
+            })()
+          }
+          nextSceneGenerated={
+            (() => {
+              const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+              const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : undefined;
+              return nextScene?.generated ?? false;
+            })()
+          }
+          nextSceneFirstFrameUrl={
+            (() => {
+              const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
+              const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : undefined;
+              return nextScene?.firstFrameUrl;
+            })()
+          }
         />
       )}
 
