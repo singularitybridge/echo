@@ -10,6 +10,7 @@ import type {
   AssetFilters,
   CreateAssetRequest,
 } from '@/types/asset';
+import { AspectRatio } from '@/types';
 import { generateAssetId } from '@/services/assetId';
 import {
   saveAsset,
@@ -185,11 +186,13 @@ export async function POST(request: NextRequest) {
     let format: 'png' | 'jpg' | 'webp' = 'png';
 
     // Generate or download image
-    // Check imageUrl first to avoid re-generating already saved images
-    if (body.imageUrl) {
+    // Check imageUrl OR url first to avoid re-generating already saved images
+    // (AssetLibrary passes 'url', while other callers pass 'imageUrl')
+    const providedUrl = body.imageUrl || (body as any).url;
+    if (providedUrl) {
       // Check if this is already a saved project asset
       const projectAssetPattern = /^\/assets\/([^/]+)\/([^/]+)\/(asset-[^.]+)\.(\w+)$/;
-      const match = body.imageUrl.match(projectAssetPattern);
+      const match = providedUrl.match(projectAssetPattern);
 
       if (match) {
         // This is already a saved project asset, use it directly
@@ -200,12 +203,12 @@ export async function POST(request: NextRequest) {
           projectId: urlProjectId,
           type: urlType,
           format: urlFormat,
-          url: body.imageUrl
+          url: providedUrl
         });
 
         // Read the existing image file to get dimensions
         const { readFile, mkdir } = await import('fs/promises');
-        const imagePath = join(process.cwd(), 'public', body.imageUrl);
+        const imagePath = join(process.cwd(), 'public', providedUrl);
         imageBuffer = await readFile(imagePath);
         format = urlFormat as 'png' | 'jpg' | 'webp';
 
@@ -242,7 +245,7 @@ export async function POST(request: NextRequest) {
           editHistory: [],
 
           format,
-          aspectRatio: body.aspectRatio || '9:16',
+          aspectRatio: body.aspectRatio || AspectRatio.PORTRAIT,
           width,
           height,
           fileSize: imageBuffer.length,
@@ -265,29 +268,58 @@ export async function POST(request: NextRequest) {
         console.log('✅ Asset saved with existing ID:', existingAssetId);
         return NextResponse.json(asset, { status: 201 });
       } else {
-        // Not a saved project asset, download it
-        console.log('Downloading image from URL for asset:', body.name);
+        // Not a saved project asset, check if it's a story storage URL
+        // Pattern: /api/stories/{projectId}/assets/{type}/{filename}
+        const storyStoragePattern = /^\/api\/stories\/([^/]+)\/assets\/([^/]+)\/([^/]+)$/;
+        const storyMatch = providedUrl.match(storyStoragePattern);
 
-        // Convert relative URLs to absolute URLs for server-side fetch
-        let imageUrl = body.imageUrl;
-        if (imageUrl.startsWith('/')) {
-          const protocol = request.headers.get('x-forwarded-proto') || 'http';
-          const host = request.headers.get('host') || 'localhost:3039';
-          imageUrl = `${protocol}://${host}${imageUrl}`;
-        }
+        if (storyMatch) {
+          // Read directly from story storage filesystem
+          const [, storyProjectId, assetType, filename] = storyMatch;
+          const filePath = join(process.cwd(), 'stories', storyProjectId, 'assets', assetType, filename);
 
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to download image from ${imageUrl}`);
-        }
+          console.log('Reading from story storage for asset:', body.name, filePath);
 
-        imageBuffer = Buffer.from(await response.arrayBuffer());
+          const { readFile } = await import('fs/promises');
+          const { existsSync } = await import('fs');
 
-        // Detect format from URL
-        if (body.imageUrl.endsWith('.jpg') || body.imageUrl.endsWith('.jpeg')) {
-          format = 'jpg';
-        } else if (body.imageUrl.endsWith('.webp')) {
-          format = 'webp';
+          if (!existsSync(filePath)) {
+            throw new Error(`Story storage file not found: ${filePath}`);
+          }
+
+          imageBuffer = await readFile(filePath);
+
+          // Detect format from filename
+          if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+            format = 'jpg';
+          } else if (filename.endsWith('.webp')) {
+            format = 'webp';
+          }
+        } else {
+          // Download from external URL
+          console.log('Downloading image from URL for asset:', body.name);
+
+          // Convert relative URLs to absolute URLs for server-side fetch
+          let imageUrl = providedUrl;
+          if (imageUrl.startsWith('/')) {
+            const protocol = request.headers.get('x-forwarded-proto') || 'http';
+            const host = request.headers.get('host') || 'localhost:3039';
+            imageUrl = `${protocol}://${host}${imageUrl}`;
+          }
+
+          const response = await fetch(imageUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to download image from ${imageUrl}`);
+          }
+
+          imageBuffer = Buffer.from(await response.arrayBuffer());
+
+          // Detect format from URL
+          if (providedUrl.endsWith('.jpg') || providedUrl.endsWith('.jpeg')) {
+            format = 'jpg';
+          } else if (providedUrl.endsWith('.webp')) {
+            format = 'webp';
+          }
         }
       }
     } else if (body.imageBase64) {
@@ -310,7 +342,6 @@ export async function POST(request: NextRequest) {
       const result = await generateImage({
         prompt: body.generationPrompt,
         aspectRatio: body.aspectRatio || '9:16',
-        provider: body.provider,
       });
 
       imageBuffer = Buffer.from(await result.blob.arrayBuffer());
@@ -357,7 +388,7 @@ export async function POST(request: NextRequest) {
       editHistory: [],
 
       format,
-      aspectRatio: body.aspectRatio || '9:16',
+      aspectRatio: body.aspectRatio || AspectRatio.PORTRAIT,
       width,
       height,
       fileSize: imageBuffer.length,

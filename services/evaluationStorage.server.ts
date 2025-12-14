@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoEvaluation } from './evaluationService';
+import { VideoEvaluation } from './evaluationService.agentHub';
 
 class EvaluationStorageServer {
   async saveEvaluation(

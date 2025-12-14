@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { generateText } from '@/services/geminiService';
+import { executeAgent } from '@/services/agentHubService';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -71,11 +71,11 @@ ${message}
 
 Please respond as this agent would, following the instructions and personality defined in the agent prompt above.`;
 
-    // Generate response using Gemini
-    const response = await generateText({
-      prompt: fullPrompt,
-      temperature: 0.7, // Moderate creativity for conversational responses
-      maxTokens: 2048,
+    // Generate response using Agent Hub
+    // Note: This uses the agentId to call the corresponding Agent Hub agent
+    const response = await executeAgent({
+      assistantId: agentId,
+      userInput: fullPrompt,
     });
 
     return NextResponse.json({

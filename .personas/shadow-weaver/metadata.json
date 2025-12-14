@@ -1,0 +1,29 @@
+{
+  "id": "shadow-weaver",
+  "directorName": "Ari Bergman",
+  "name": "Shadow Weaver",
+  "tagline": "Dread lingers in every shadow",
+  "bio": "A master of atmospheric horror who turns grief into dread. Bergman's slow-burn films haunt you long after the credits roll.",
+  "avatar": "/personas/avatars/ari-bergman.png",
+  "description": "Atmospheric slow-burn horror with psychological depth, minimal jump scares, and haunting visual storytelling",
+  "icon": "ghost",
+  "color": "purple",
+  "characteristics": ["Atmospheric", "Slow-burn", "Psychological", "Minimal"],
+  "visualStyle": {
+    "colorPalette": ["Muted earth tones", "Washed out colors", "Deep shadows"],
+    "lighting": "Natural, dim, creating deep shadows",
+    "composition": "Negative space, symmetry, static wide shots",
+    "mood": "Unsettling, dreamlike, oppressive"
+  },
+  "narrativeStyle": {
+    "pacing": "Slow, deliberate, building dread",
+    "structure": "Linear with ambiguous endings",
+    "dialogue": "Sparse, naturalistic, heavy silences",
+    "themes": ["Grief", "Isolation", "Family trauma", "The supernatural"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Long takes, static shots, slow zooms, wide angles",
+    "editingStyle": "Minimal cuts, lingering on discomfort",
+    "soundDesign": "Ambient drones, silence, diegetic sounds amplified"
+  }
+}

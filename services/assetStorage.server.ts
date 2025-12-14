@@ -9,7 +9,7 @@ import type {
   AssetLibraryResponse,
   AssetGenerationRequest,
   AssetGenerationBatch,
-  AssetEditRequest,
+  EditAssetRequest,
   AssetUploadMetadata,
 } from '../types/asset';
 
@@ -155,8 +155,8 @@ class AssetStorageServer {
   /**
    * Edit an existing asset with AI
    */
-  async editAsset(request: AssetEditRequest): Promise<Asset> {
-    const response = await fetch(`/api/assets/${request.assetId}/edit`, {
+  async editAsset(assetId: string, request: EditAssetRequest): Promise<Asset> {
+    const response = await fetch(`/api/assets/${assetId}/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

@@ -37,11 +37,11 @@ export async function POST(request: NextRequest) {
       story = result.story;
       changesSummary = result.changesSummary;
     } else if (body.mode === 'quick') {
-      // Quick Path: Genre + Type + Energy
-      story = await generateQuickPathStory(body.params as QuickPathParams);
+      // Quick Path: Genre + Type + Energy + Persona + Story Guidance
+      story = await generateQuickPathStory(body.params as QuickPathParams, body.personaId, body.storyGuidance);
     } else if (body.mode === 'custom') {
-      // Custom Path: User Concept
-      story = await generateCustomPathStory(body.params as CustomPathParams);
+      // Custom Path: User Concept + Persona
+      story = await generateCustomPathStory(body.params as CustomPathParams, body.personaId);
     } else {
       return NextResponse.json(
         {

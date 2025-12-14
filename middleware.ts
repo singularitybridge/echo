@@ -8,6 +8,8 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth/login') ||
+    pathname.startsWith('/api/agent-hub/execute') || // Internal proxy for Agent Hub
+    pathname.startsWith('/api/story/generate') || // Story generation API (for testing)
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico')
   ) {

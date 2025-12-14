@@ -2,7 +2,6 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { GoogleGenAI } from '@google/genai';
 
 export interface GenerateImageParams {
   prompt: string;
@@ -22,7 +21,7 @@ let generationInProgress = false;
 let lastGenerationKey = '';
 
 /**
- * Generate an image using Gemini 2.5 Flash Image (Nano Banana)
+ * Generate an image using Fal.ai Flux model
  */
 export const generateImage = async (
   params: GenerateImageParams,
@@ -31,71 +30,34 @@ export const generateImage = async (
   console.log(`\n[generateImage] ${timestamp} - API CALL START`);
   console.log('[generateImage] Params:', params);
 
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('NEXT_PUBLIC_GEMINI_API_KEY not found in environment');
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: [params.prompt],
-    config: {
-      responseModalities: ['IMAGE'],
-      imageConfig: {
-        aspectRatio: params.aspectRatio || '16:9',
-      },
+  // Call our Fal.ai image generation API
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3039';
+  const response = await fetch(`${baseUrl}/api/generate-image-fal`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({
+      prompt: params.prompt,
+      aspectRatio: params.aspectRatio || '16:9',
+    }),
   });
 
-  console.log('Image generation response:', response);
-  console.log('Response type:', typeof response);
-  console.log('Response keys:', Object.keys(response));
-
-  // Try different possible response structures
-  let imageBytes: string | undefined;
-  let mimeType = 'image/png';
-
-  // Check if response has parts array
-  if (response.parts && Array.isArray(response.parts)) {
-    console.log('Response has parts array, length:', response.parts.length);
-
-    // Try camelCase naming (inlineData)
-    const imagePartCamel = response.parts.find((part: any) => part.inlineData);
-    if (imagePartCamel?.inlineData) {
-      console.log('Found image with inlineData (camelCase)');
-      imageBytes = imagePartCamel.inlineData.data;
-      mimeType = imagePartCamel.inlineData.mimeType || mimeType;
-    } else {
-      // Try snake_case naming (inline_data)
-      const imagePartSnake = response.parts.find((part: any) => part.inline_data);
-      if (imagePartSnake?.inline_data) {
-        console.log('Found image with inline_data (snake_case)');
-        imageBytes = imagePartSnake.inline_data.data;
-        mimeType = imagePartSnake.inline_data.mime_type || imagePartSnake.inline_data.mimeType || mimeType;
-      }
-    }
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `API error: ${response.status}`);
   }
 
-  // Check if response has direct data property
-  if (!imageBytes && (response as any).data) {
-    console.log('Found response.data');
-    imageBytes = (response as any).data;
-  }
+  const data = await response.json();
 
-  // Check if response has direct image property
-  if (!imageBytes && (response as any).image) {
-    console.log('Found response.image');
-    imageBytes = (response as any).image;
-  }
-
-  if (!imageBytes) {
-    console.error('Failed to find image in response. Full response structure:', JSON.stringify(response, null, 2));
+  if (!data.success || !data.imageBytes) {
     throw new Error('No image was generated in the response');
   }
 
-  console.log('[generateImage] ✅ Successfully extracted image bytes, length:', imageBytes.length);
+  const imageBytes = data.imageBytes;
+  const mimeType = data.mimeType || 'image/png';
+
+  console.log('[generateImage] ✅ Successfully received image bytes, length:', imageBytes.length);
 
   // Convert base64 to blob
   const byteString = atob(imageBytes);
@@ -400,86 +362,3 @@ export async function generateWithFluxContextPro(params: {
   };
 }
 
-/**
- * Generate image using Gemini 2.5 Flash Image (Nano Banana) with reference
- * Ultra-fast (1-2s) with strong semantic understanding
- */
-export async function generateWithNanoBanana(params: {
-  referenceImageUrl?: string;
-  prompt: string;
-  aspectRatio?: string;
-}): Promise<GeneratedImage> {
-  console.log('Using Gemini Nano Banana (2.5 Flash Image)');
-
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('NEXT_PUBLIC_GEMINI_API_KEY not found in environment');
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
-  // Build content array with reference image if provided
-  const contents: any[] = [];
-
-  if (params.referenceImageUrl) {
-    // Fetch reference image and convert to inline data
-    const response = await fetch(params.referenceImageUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuffer).reduce(
-        (data, byte) => data + String.fromCharCode(byte),
-        ''
-      )
-    );
-
-    contents.push({
-      inlineData: {
-        data: base64,
-        mimeType: 'image/png',
-      },
-    });
-  }
-
-  // Add prompt
-  contents.push(params.prompt);
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents,
-    config: {
-      responseModalities: ['IMAGE'],
-      imageConfig: {
-        aspectRatio: params.aspectRatio || '9:16',
-      },
-    },
-  });
-
-  const imageParts = response.candidates?.[0]?.content?.parts?.filter(
-    (part: any) => part.inlineData
-  );
-
-  if (!imageParts || imageParts.length === 0) {
-    throw new Error('No image generated by Gemini Nano Banana');
-  }
-
-  const imagePart = imageParts[0];
-  const imageBytes = imagePart.inlineData.data;
-  const mimeType = imagePart.inlineData.mimeType;
-
-  // Convert base64 to blob
-  const byteCharacters = atob(imageBytes);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  const blob = new Blob([byteArray], { type: mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-
-  return {
-    imageBytes,
-    mimeType,
-    objectUrl,
-    blob,
-  };
-}

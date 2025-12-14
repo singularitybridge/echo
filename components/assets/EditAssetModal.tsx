@@ -53,8 +53,15 @@ export default function EditAssetModal({
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Multi-model state
-  const [selectedModels, setSelectedModels] = useState<ImageEditingModel[]>(['gemini-flash']);
+  // Multi-model state - all editing models selected by default
+  const [selectedModels, setSelectedModels] = useState<ImageEditingModel[]>([
+    'gemini-flash',
+    'flux-kontext',
+    'qwen-edit',
+    'seededit',
+    'seededit-v4',
+    'nano-banana-pro',
+  ]);
   const [hoveredPreview, setHoveredPreview] = useState<ModelEditResult | null>(null);
   const [selectedResult, setSelectedResult] = useState<ImageEditingModel | null>(null);
 
@@ -69,46 +76,71 @@ export default function EditAssetModal({
     const loadLineage = async () => {
       setIsLoadingLineage(true);
       try {
-        const response = await fetch(`/api/assets/${asset.id}/lineage`);
-        if (!response.ok) {
-          throw new Error('Failed to load version history');
-        }
+        // Check if this is a storyboard asset (synthetic ID from story storage)
+        const isStoryboardAsset = asset.id.startsWith('storyboard-') || asset.type === 'storyboard';
 
-        const data = await response.json();
-        setVersionHistory(data.lineage);
-        setCurrentVersionIndex(data.lineage.length - 1); // Start at latest version
+        if (isStoryboardAsset) {
+          // Storyboard assets don't have version history in the database
+          // Initialize with just the current asset as version 1
+          const storyboardAsset: Asset = {
+            ...asset,
+            version: 1,
+            editHistory: [],
+          };
+          setVersionHistory([storyboardAsset]);
+          setCurrentVersionIndex(0);
 
-        // Initialize messages with edit history
-        const initialMessages: ChatMessage[] = [];
-        data.lineage.forEach((version: Asset, index: number) => {
-          if (index === 0) {
-            // First version - original asset
-            initialMessages.push({
+          // Initialize with a simple creation message
+          setMessages([
+            {
               role: 'assistant',
-              content: `Asset created: ${version.name}`,
-              timestamp: new Date(version.createdAt).getTime(),
-            });
-          } else {
-            // Subsequent versions - show edit prompts
-            const editEntry = version.editHistory[version.editHistory.length - 1];
-            if (editEntry) {
-              initialMessages.push({
-                role: 'user',
-                content: editEntry.editPrompt,
-                timestamp: new Date(editEntry.timestamp).getTime(),
-              });
+              content: `Storyboard frame loaded: ${asset.name}. You can edit this image using AI - describe what changes you'd like to make.`,
+              timestamp: Date.now(),
+            },
+          ]);
+        } else {
+          // Regular assets - load from database
+          const response = await fetch(`/api/assets/${asset.id}/lineage`);
+          if (!response.ok) {
+            throw new Error('Failed to load version history');
+          }
+
+          const data = await response.json();
+          setVersionHistory(data.lineage);
+          setCurrentVersionIndex(data.lineage.length - 1); // Start at latest version
+
+          // Initialize messages with edit history
+          const initialMessages: ChatMessage[] = [];
+          data.lineage.forEach((version: Asset, index: number) => {
+            if (index === 0) {
+              // First version - original asset
               initialMessages.push({
                 role: 'assistant',
-                content: `Version ${version.version} created with your changes.`,
+                content: `Asset created: ${version.name}`,
                 timestamp: new Date(version.createdAt).getTime(),
               });
+            } else {
+              // Subsequent versions - show edit prompts
+              const editEntry = version.editHistory[version.editHistory.length - 1];
+              if (editEntry) {
+                initialMessages.push({
+                  role: 'user',
+                  content: editEntry.editPrompt,
+                  timestamp: new Date(editEntry.timestamp).getTime(),
+                });
+                initialMessages.push({
+                  role: 'assistant',
+                  content: `Version ${version.version} created with your changes.`,
+                  timestamp: new Date(version.createdAt).getTime(),
+                });
+              }
             }
-          }
-        });
-        setMessages(initialMessages);
+          });
+          setMessages(initialMessages);
+        }
       } catch (error) {
         console.error('Failed to load version history:', error);
-        alert('Failed to load version history');
+        alert('Failed to load version history. Please try again.');
       } finally {
         setIsLoadingLineage(false);
       }
@@ -187,7 +219,15 @@ export default function EditAssetModal({
       setChatInput('');
       setIsGenerating(false);
       setIsRegenerating(false);
-      setSelectedModels(['gemini-flash']);
+      // Reset to all editing models selected
+      setSelectedModels([
+        'gemini-flash',
+        'flux-kontext',
+        'qwen-edit',
+        'seededit',
+        'seededit-v4',
+        'nano-banana-pro',
+      ]);
       setSelectedResult(null);
     }
   }, [isOpen]);
@@ -220,26 +260,57 @@ export default function EditAssetModal({
         reader.readAsDataURL(imageBlob);
       });
 
-      // Update the original asset with the edited image
-      const response = await fetch(`/api/assets/${asset.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: base64Image,
-          editHistory: currentAsset.editHistory,
-          version: currentAsset.version,
-        }),
-      });
+      // Check if this is a storyboard asset (synthetic ID from story storage)
+      const isStoryboardAsset = asset.id.startsWith('storyboard-') || asset.type === 'storyboard';
 
-      if (!response.ok) {
-        throw new Error('Failed to save asset');
+      if (isStoryboardAsset) {
+        // Storyboard assets need to be saved via the stories API
+        // Extract project ID from the asset
+        const projectId = asset.projectId;
+        if (!projectId) {
+          throw new Error('Missing project ID for storyboard asset');
+        }
+
+        // Generate a unique filename for the edited storyboard frame
+        const timestamp = Date.now();
+        const filename = `storyboard-edited-${timestamp}.png`;
+
+        const response = await fetch(`/api/stories/${projectId}/assets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'storyboard',
+            filename,
+            imageBase64: base64Image,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save storyboard asset');
+        }
+      } else {
+        // Regular assets - update via the assets API
+        const response = await fetch(`/api/assets/${asset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: base64Image,
+            editHistory: currentAsset.editHistory,
+            version: currentAsset.version,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save asset');
+        }
       }
 
       onEditComplete();
       onClose();
     } catch (error) {
       console.error('Failed to save asset:', error);
-      alert('Failed to save asset. Please try again.');
+      alert(`Failed to save asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -266,19 +337,49 @@ export default function EditAssetModal({
         reader.readAsDataURL(imageBlob);
       });
 
-      // Create a new asset based on the current version
-      const response = await fetch(`/api/assets/${currentAsset.id}/save-as-new`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: base64Image,
-          metadata: currentAsset,
-        }),
-      });
+      // Check if this is a storyboard asset (synthetic ID from story storage)
+      const isStoryboardAsset = asset.id.startsWith('storyboard-') || asset.type === 'storyboard';
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save as new asset');
+      if (isStoryboardAsset) {
+        // Storyboard assets need to be saved via the stories API
+        const projectId = asset.projectId;
+        if (!projectId) {
+          throw new Error('Missing project ID for storyboard asset');
+        }
+
+        // Generate a unique filename for the new storyboard frame
+        const timestamp = Date.now();
+        const filename = `storyboard-new-${timestamp}.png`;
+
+        const response = await fetch(`/api/stories/${projectId}/assets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'storyboard',
+            filename,
+            imageBase64: base64Image,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save storyboard asset as new');
+        }
+      } else {
+        // Regular assets - create a new asset via the assets API
+        const response = await fetch(`/api/assets/${currentAsset.id}/save-as-new`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: base64Image,
+            metadata: currentAsset,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save as new asset');
+        }
       }
 
       onEditComplete();
@@ -390,11 +491,11 @@ export default function EditAssetModal({
           ...currentAsset.editHistory,
           {
             editPrompt,
-            timestamp: new Date().toISOString(),
-            model: result.model,
+            timestamp: new Date(),
+            previousAssetId: currentAsset.id,
           },
         ],
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       };
 
       // Set selected result for visual indication
@@ -603,9 +704,6 @@ export default function EditAssetModal({
                     const lastEdit = version.editHistory.length > 0
                       ? version.editHistory[version.editHistory.length - 1]
                       : null;
-                    const modelName = lastEdit?.model
-                      ? getModelDefinition(lastEdit.model).name
-                      : null;
 
                     return (
                       <button
@@ -633,9 +731,6 @@ export default function EditAssetModal({
                         )}
                         {lastEdit && (
                           <div className="mt-1 ml-3.5 space-y-0.5">
-                            {modelName && (
-                              <p className="text-xs font-medium text-purple-600">{modelName}</p>
-                            )}
                             <p className="text-xs text-gray-500 line-clamp-2">
                               {lastEdit.editPrompt}
                             </p>
@@ -721,7 +816,7 @@ export default function EditAssetModal({
             <div className="border-b border-gray-200 p-4 bg-gray-50">
               <ModelSelector
                 selectedModels={selectedModels}
-                onModelsChange={setSelectedModels}
+                onModelsChange={setSelectedModels as any}
               />
             </div>
 
@@ -787,8 +882,8 @@ export default function EditAssetModal({
                                         return (result.error as any).msg;
                                       }
                                       // Handle array of validation errors
-                                      if (Array.isArray(result.error) && result.error.length > 0 && 'msg' in result.error[0]) {
-                                        return result.error.map((e: any) => e.msg).join(', ');
+                                      if (Array.isArray(result.error) && (result.error as any[]).length > 0 && 'msg' in (result.error as any[])[0]) {
+                                        return (result.error as any[]).map((e: any) => e.msg).join(', ');
                                       }
                                       // Fallback: stringify the object
                                       return JSON.stringify(result.error);

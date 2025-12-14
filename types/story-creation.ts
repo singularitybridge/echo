@@ -36,6 +36,9 @@ export interface CustomPathParams {
   mood?: string; // Emotional tone (optional)
 }
 
+// Speech type for voiceover vs narration differentiation
+export type SpeechType = 'voiceover' | 'narration';
+
 /**
  * Generated scene structure
  */
@@ -45,13 +48,18 @@ export interface GeneratedScene {
   duration: number; // seconds (default: 8)
   prompt: string; // Visual description for Veo
   cameraAngle: string;
-  voiceover: string; // Dialogue in quotes
+  voiceover: string; // The spoken text (dialogue or narration)
+  speechType?: SpeechType; // 'voiceover' = character speaking on-screen, 'narration' = off-screen narrator
   generated: boolean;
   settings: {
     model: 'Veo 3.1';
     resolution: '720p' | '1080p';
     isLooping: boolean;
   };
+  // Storyboard data (populated after storyboard generation)
+  imagePrompt?: string; // AI-generated image prompt used for storyboard frame
+  storyboardMood?: string; // Mood/atmosphere from storyboard analysis
+  audioUrl?: string; // Generated TTS audio file URL
 }
 
 /**
@@ -81,6 +89,7 @@ export interface StoryDraft {
     aspectRatio: '9:16'; // Portrait only for generated stories
     defaultModel: 'Veo 3.1';
     defaultResolution: '720p';
+    personaId?: string; // Director persona ID for consistent styling
   };
   scenes: GeneratedScene[];
   generationMetadata?: GenerationMetadata; // Optional for backward compatibility
@@ -103,6 +112,8 @@ export interface RefinementMessage {
 export interface GenerateStoryRequest {
   mode: 'quick' | 'custom';
   params: QuickPathParams | CustomPathParams;
+  personaId?: string; // Optional director persona ID for style guide injection
+  storyGuidance?: string; // Optional user guidance for the story direction
   refinement?: string; // Optional refinement feedback
   existingStory?: StoryDraft; // Existing story to refine
 }

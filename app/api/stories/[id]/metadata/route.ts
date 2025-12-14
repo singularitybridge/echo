@@ -19,20 +19,22 @@ import { storyStorage } from '../../../../../services/storyStorage';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
     const body = await request.json();
 
-    await storyStorage.updateMetadata(params.id, body);
+    await storyStorage.updateMetadata(id, body);
 
     return NextResponse.json({
       success: true,
-      storyId: params.id,
+      storyId: id,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error(`Error updating metadata for story ${params.id}:`, error);
+    console.error(`Error updating metadata for story ${id}:`, error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to update metadata' },
       { status: 500 }

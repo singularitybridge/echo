@@ -131,7 +131,7 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
               asset.provider
             )}`}
           >
-            {asset.provider === 'uploaded' ? 'Uploaded' : asset.provider.toUpperCase()}
+            {asset.provider === 'upload' ? 'Uploaded' : asset.provider.toUpperCase()}
           </span>
         </div>
       </div>

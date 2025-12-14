@@ -27,6 +27,11 @@ export enum Resolution {
   P1080 = '1080p',
 }
 
+// Speech type for voiceover vs narration differentiation
+export type SpeechType = 'voiceover' | 'narration';
+// voiceover: Character speaking on-screen (dialogue visible)
+// narration: Off-screen narrator voice (character not shown speaking)
+
 export enum GenerationMode {
   TEXT_TO_VIDEO = 'Text to Video',
   FRAMES_TO_VIDEO = 'Frames to Video',

@@ -76,3 +76,4 @@ docs/
 # Temporary files
 temp/
 *.json.tmp
+.vercel

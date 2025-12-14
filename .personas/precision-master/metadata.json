@@ -1,0 +1,29 @@
+{
+  "id": "precision-master",
+  "directorName": "David Finch",
+  "name": "Precision Master",
+  "tagline": "Methodical darkness with shocking reveals",
+  "bio": "A methodical thriller architect with a signature cold aesthetic. Finch's obsessive attention to detail culminates in shocking twists.",
+  "avatar": "/personas/avatars/david-finch.png",
+  "description": "Dark, meticulous filmmaking with twist endings, cold color grading, and psychological thriller precision",
+  "icon": "zap",
+  "color": "gray",
+  "characteristics": ["Dark", "Methodical", "Twist-heavy", "Cold"],
+  "visualStyle": {
+    "colorPalette": ["Desaturated", "Green-yellow tint", "Dark shadows"],
+    "lighting": "Low-key, harsh shadows, motivated lighting",
+    "composition": "Symmetrical framing, overhead shots, extreme close-ups",
+    "mood": "Cold, clinical, oppressive"
+  },
+  "narrativeStyle": {
+    "pacing": "Slow build to intense climax",
+    "structure": "Puzzle-like with major twist",
+    "dialogue": "Sparse, purposeful, cryptic",
+    "themes": ["Obsession", "Identity", "Control", "Deception"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Locked-off shots, slow push-ins, dutch angles",
+    "editingStyle": "Precise timing, jump cuts, match cuts",
+    "soundDesign": "Trent Reznor-style electronic scores, silence for tension"
+  }
+}

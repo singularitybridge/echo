@@ -57,7 +57,7 @@ export async function generateVideoWithKling(
 
     // Extract video URL from result
     // fal.ai returns { video: { url: string } }
-    const videoUrl = result.video?.url;
+    const videoUrl = (result as any).video?.url;
     if (!videoUrl) {
       throw new Error('No video URL in kling-v2.5-turbo-pro result');
     }

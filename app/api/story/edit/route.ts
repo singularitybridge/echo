@@ -4,15 +4,12 @@
  */
 
 import {NextRequest, NextResponse} from 'next/server';
-import {editScript} from '../../../../services/scriptEditingAgent';
-import {generateReview} from '../../../../services/reviewAgent';
+import {editStory} from '../../../../services/storyEditingService';
 import {StoryDraft} from '../../../../types/story-creation';
 
 /**
  * POST /api/story/edit
- * Single-shot story editing endpoint using dual-agent system
- * - Script Editing Agent: Modifies the story based on user request
- * - Review Agent: Generates user-friendly response describing changes
+ * Story editing endpoint using Agent Hub story-editor agent
  *
  * Request body:
  * {
@@ -37,7 +34,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[Story Edit API] Request received');
 
-    const {storyDraft, editRequest} = body;
+    const {storyDraft, editRequest, currentShot} = body;
 
     // Validate inputs
     if (!storyDraft || !storyDraft.projectMetadata || !storyDraft.scenes) {
@@ -58,29 +55,21 @@ export async function POST(request: NextRequest) {
 
     const originalStory: StoryDraft = storyDraft;
     const action = editRequest.trim();
+    const personaId = originalStory.projectMetadata.personaId;
 
-    console.log('[Story Edit API] Edit request:', action);
+    console.log('[Story Edit API] Edit request:', action, personaId ? `with persona: ${personaId}` : '');
 
-    // Step 1: Script Editing Agent - Modify the story
-    console.log('[Story Edit API] Calling Script Editing Agent...');
-    const refinedStory = await editScript(originalStory, action);
+    // Call Agent Hub story-editor agent
+    console.log('[Story Edit API] Calling Agent Hub story-editor...');
+    const result = await editStory(originalStory, action, currentShot, personaId);
 
-    // Step 2: Review Agent - Generate user-friendly response
-    console.log('[Story Edit API] Calling Review Agent...');
-    const reviewResult = await generateReview(originalStory, refinedStory, action);
-
-    console.log('[Story Edit API] Edit complete:', {
-      scenesAdded: reviewResult.changesSummary.scenesAdded,
-      scenesRemoved: reviewResult.changesSummary.scenesRemoved,
-      scenesModified: reviewResult.changesSummary.scenesModified,
-      titleChanged: reviewResult.changesSummary.titleChanged,
-    });
+    console.log('[Story Edit API] Edit complete:', result.changesSummary);
 
     // Return complete result
     return NextResponse.json({
-      updatedStory: refinedStory,
-      response: reviewResult.response,
-      changesSummary: reviewResult.changesSummary,
+      updatedStory: result.updatedStory,
+      response: result.response,
+      changesSummary: result.changesSummary,
     });
   } catch (error) {
     console.error('[Story Edit API] Error:', error);

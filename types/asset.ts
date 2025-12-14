@@ -7,12 +7,12 @@ import { AspectRatio } from '../types';
 /**
  * Asset types for visual elements in the project
  */
-export type AssetType = 'character' | 'prop' | 'location' | 'background' | 'upload';
+export type AssetType = 'character' | 'prop' | 'location' | 'background' | 'upload' | 'scene';
 
 /**
  * AI providers that can generate or edit assets
  */
-export type AssetProvider = 'fal-ai' | 'gemini' | 'upload' | 'ai-edited';
+export type AssetProvider = 'fal-ai' | 'fal' | 'gemini' | 'upload' | 'ai-edited';
 
 /**
  * Image format options
@@ -27,7 +27,7 @@ export type AssetStatus = 'generating' | 'complete' | 'error' | 'processing';
 /**
  * Role of asset when placed in a scene
  */
-export type AssetRole = 'character' | 'background' | 'prop';
+export type AssetRole = 'character' | 'background' | 'prop' | 'storyboard-frame';
 
 /**
  * History entry for asset edits

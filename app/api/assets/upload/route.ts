@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import type { AssetType, Asset } from '@/types/asset';
+import { AspectRatio } from '@/types';
 import { generateAssetId } from '@/services/assetId';
 import { saveAsset } from '@/services/assetStorage';
 import { generateThumbnail, getImageDimensions } from '@/services/thumbnailGenerator';
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       name,
       description: description || '',
 
-      provider: 'uploaded',
+      provider: 'upload',
       generationPrompt: '',
 
       projectId,
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
       editHistory: [],
 
       format,
-      aspectRatio: width > height ? '16:9' : '9:16', // Auto-detect from dimensions
+      aspectRatio: width > height ? AspectRatio.LANDSCAPE : AspectRatio.PORTRAIT, // Auto-detect from dimensions
       width,
       height,
       fileSize: imageBuffer.length,

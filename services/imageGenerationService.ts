@@ -78,18 +78,6 @@ export async function generateWithGenerationModel(
         break;
       }
 
-      case 'bria-v3': {
-        const result = await fal.subscribe(modelDef.endpoint, {
-          input: {
-            prompt,
-            image_size: { width: dimensions.width, height: dimensions.height },
-          },
-        }) as any;
-        // bria-v3 returns result.image (singular) not result.images
-        imageUrl = result.image?.url || result.url;
-        break;
-      }
-
       case 'imagen4-ultra': {
         const result = await fal.subscribe(modelDef.endpoint, {
           input: {
@@ -118,6 +106,19 @@ export async function generateWithGenerationModel(
           input: {
             prompt,
             image_size: { width: dimensions.width, height: dimensions.height },
+          },
+        }) as any;
+        imageUrl = result.images[0].url;
+        break;
+      }
+
+      case 'nano-banana-pro': {
+        // nano-banana-pro uses aspect_ratio and resolution instead of image_size
+        const result = await fal.subscribe(modelDef.endpoint, {
+          input: {
+            prompt,
+            aspect_ratio: aspectRatio,
+            resolution: '2K', // Use 2K for good quality
           },
         }) as any;
         imageUrl = result.images[0].url;

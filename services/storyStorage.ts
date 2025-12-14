@@ -14,7 +14,8 @@
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { Scene, AspectRatio, VeoModel, Resolution } from '../types';
+import { Scene } from '../types/project';
+import { AspectRatio, VeoModel, Resolution } from '../types';
 
 // ============================================================================
 // Types
@@ -128,6 +129,7 @@ export interface StoryAssets {
   props: string[];
   locations: string[];
   effects: string[];
+  storyboards: string[];
 }
 
 export interface ChangesSummary {
@@ -184,6 +186,7 @@ class StoryStorage {
     await mkdir(join(assetsPath, 'props'), { recursive: true });
     await mkdir(join(assetsPath, 'locations'), { recursive: true });
     await mkdir(join(assetsPath, 'effects'), { recursive: true });
+    await mkdir(join(assetsPath, 'storyboards'), { recursive: true });
     await mkdir(videosPath, { recursive: true });
     await mkdir(evaluationsPath, { recursive: true });
   }
@@ -499,7 +502,7 @@ class StoryStorage {
    */
   async saveAsset(
     storyId: string,
-    type: 'character' | 'prop' | 'location' | 'effect',
+    type: 'character' | 'prop' | 'location' | 'effect' | 'storyboard',
     filename: string,
     data: Buffer
   ): Promise<string> {
@@ -529,9 +532,10 @@ class StoryStorage {
       props: [],
       locations: [],
       effects: [],
+      storyboards: [],
     };
 
-    const types: Array<keyof StoryAssets> = ['characters', 'props', 'locations', 'effects'];
+    const types: Array<keyof StoryAssets> = ['characters', 'props', 'locations', 'effects', 'storyboards'];
 
     for (const type of types) {
       const typePath = join(assetsPath, type);

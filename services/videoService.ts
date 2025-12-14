@@ -28,21 +28,24 @@ export interface VideoGenerationSettings {
 }
 
 /**
- * Generate a video with optional character reference images, start frame, and custom settings
+ * Generate a video with optional character reference images, start/end frames, and custom settings
  * @param prompt - Text prompt for video generation
  * @param characterReferences - Optional character reference images for consistency
  * @param settings - Optional generation settings (model, aspect ratio, resolution, looping)
  * @param startFrameDataUrl - Optional data URL of start frame from previous scene (for shot continuity)
+ * @param endFrameDataUrl - Optional data URL of end frame target (for transitions and controlled generation)
  */
 export const generateVideo = async (
   prompt: string,
   characterReferences?: GeneratedImage[],
   settings?: VideoGenerationSettings,
   startFrameDataUrl?: string,
+  endFrameDataUrl?: string,
 ): Promise<GeneratedVideo> => {
   console.log('Generating video with prompt:', prompt);
   console.log('Character references:', characterReferences?.length || 0);
   console.log('Start frame provided:', !!startFrameDataUrl);
+  console.log('End frame provided:', !!endFrameDataUrl);
   console.log('Settings:', settings);
 
   const aspectRatio = settings?.aspectRatio || AspectRatio.LANDSCAPE;
@@ -96,6 +99,43 @@ export const generateVideo = async (
     console.log('Converted start frame to ImageFile for shot continuity');
   }
 
+  // Convert end frame data URL or file path to ImageFile if provided
+  let endFrame: ImageFile | null = null;
+  if (endFrameDataUrl) {
+    let blob: Blob;
+    let base64Data: string;
+    let mimeType: string;
+
+    // Check if it's a data URL or a file path
+    if (endFrameDataUrl.startsWith('data:')) {
+      // It's a data URL (legacy format)
+      base64Data = endFrameDataUrl.split(',')[1];
+      mimeType = endFrameDataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
+      blob = await fetch(endFrameDataUrl).then(r => r.blob());
+    } else {
+      // It's a file path (new format like /frames/project-id/scene-id-first.png or /assets/asset-id.png)
+      // Fetch the image from the public path
+      const response = await fetch(endFrameDataUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch end frame from ${endFrameDataUrl}: ${response.statusText}`);
+      }
+      blob = await response.blob();
+      mimeType = blob.type || 'image/png';
+
+      // Convert blob to base64
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
+      base64Data = btoa(binary);
+    }
+
+    endFrame = {
+      file: new File([blob], 'end-frame.png', { type: mimeType }),
+      base64: base64Data,
+    };
+    console.log('Converted end frame to ImageFile for transition/target');
+  }
+
   // Use FRAMES_TO_VIDEO mode when start frame is provided (shot continuity)
   // Use REFERENCES_TO_VIDEO mode when only references are provided (character consistency)
   // For portrait aspect ratio (9:16), always use FRAMES_TO_VIDEO with single reference
@@ -132,7 +172,7 @@ export const generateVideo = async (
     aspectRatio,
     resolution: settings?.resolution || Resolution.P720,
     startFrame,
-    endFrame: null,
+    endFrame,
     referenceImages,
     styleImage: null,
     inputVideo: null,

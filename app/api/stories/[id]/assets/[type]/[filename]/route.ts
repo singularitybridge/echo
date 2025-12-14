@@ -11,7 +11,7 @@ export async function GET(
     const { id, type, filename } = await params;
 
     // Validate type
-    const validTypes = ['characters', 'props', 'locations', 'effects'];
+    const validTypes = ['characters', 'props', 'locations', 'effects', 'storyboards'];
     if (!validTypes.includes(type)) {
       return NextResponse.json(
         { error: `Invalid type. Must be one of: ${validTypes.join(', ')}` },

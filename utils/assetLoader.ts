@@ -158,6 +158,7 @@ export class AssetLoader {
 
   /**
    * Load assets attached to a specific scene
+   * Handles both database assets and storyboard assets from story storage
    */
   static async loadSceneAssets(
     projectId: string,
@@ -168,10 +169,10 @@ export class AssetLoader {
     }
 
     try {
-      // Load all project assets
+      // Load all project assets from database
       const allAssets = await this.loadProjectAssets(projectId);
 
-      // Filter to only attached assets
+      // Filter to only attached assets from database
       const sceneAssets = allAssets.filter(asset =>
         attachedAssetIds.includes(asset.id)
       );
@@ -181,6 +182,53 @@ export class AssetLoader {
       console.error('Failed to load scene assets:', error);
       return [];
     }
+  }
+
+  /**
+   * Load storyboard assets from story storage
+   * Checks stories/{projectId}/assets/storyboards/ directory
+   */
+  static async loadStoryboardAssets(
+    projectId: string
+  ): Promise<AssetReference[]> {
+    const refs: AssetReference[] = [];
+
+    try {
+      // Fetch storyboard assets from story storage API
+      const response = await fetch(`/api/stories/${projectId}/assets?type=storyboard`);
+      if (response.ok) {
+        const data = await response.json();
+        const storyboardAssets = data.assets?.storyboards || [];
+
+        // Convert to AssetReference format with API URL
+        for (let i = 0; i < storyboardAssets.length; i++) {
+          const assetPath = storyboardAssets[i];
+          // Story storage returns relative paths like "assets/storyboards/storyboard-scene-1.png"
+          const filename = assetPath.split('/').pop();
+          // Convert to API URL: /api/stories/{projectId}/assets/storyboards/{filename}
+          const apiUrl = `/api/stories/${projectId}/assets/storyboards/${filename}`;
+
+          // Extract scene ID from filename if present
+          // Filename format: storyboard-{sceneId}.png
+          let assetId = `storyboard-${i + 1}`;
+          if (filename) {
+            const match = filename.match(/storyboard-(.+)\.png$/);
+            if (match && match[1]) {
+              assetId = `storyboard-${match[1]}`;
+            }
+          }
+
+          refs.push({
+            objectUrl: apiUrl,
+            id: assetId,
+          });
+        }
+      }
+    } catch (error) {
+      // Story storage not available or no storyboard assets
+    }
+
+    return refs;
   }
 
   /**

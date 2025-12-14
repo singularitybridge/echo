@@ -255,7 +255,7 @@ export default function AssetPickerModal({
                         {/* Image */}
                         <div className="aspect-video bg-gray-100">
                           <img
-                            src={asset.imageUrl}
+                            src={asset.url}
                             alt={asset.name}
                             className="w-full h-full object-cover"
                           />

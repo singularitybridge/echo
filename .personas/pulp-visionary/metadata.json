@@ -1,0 +1,29 @@
+{
+  "id": "pulp-visionary",
+  "directorName": "Vincent Cortez",
+  "name": "Pulp Visionary",
+  "tagline": "Bold dialogue meets narrative chaos",
+  "bio": "A maverick director known for non-linear crime sagas and razor-sharp dialogue. Cortez's films pulse with retro energy and stylized violence.",
+  "avatar": "/personas/avatars/vincent-cortez.png",
+  "description": "Stylized violence, sharp dialogue, and non-linear storytelling with high-contrast visuals and a retro aesthetic",
+  "icon": "film",
+  "color": "amber",
+  "characteristics": ["Non-linear", "Dialogue-heavy", "Stylized", "Retro"],
+  "visualStyle": {
+    "colorPalette": ["High contrast", "Bold primary colors", "Dark shadows"],
+    "lighting": "Hard lighting with dramatic shadows",
+    "composition": "Dynamic angles, Dutch tilts, close-ups on faces",
+    "mood": "Intense, stylized, pulpy"
+  },
+  "narrativeStyle": {
+    "pacing": "Fast with sudden shifts",
+    "structure": "Non-linear, chapter-based",
+    "dialogue": "Sharp, witty, profane, memorable",
+    "themes": ["Crime", "Redemption", "Pop culture", "Violence"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Trunk shots, tracking shots, whip pans",
+    "editingStyle": "Jump cuts, freeze frames, quick transitions",
+    "soundDesign": "Surf rock, soul, eclectic soundtrack"
+  }
+}

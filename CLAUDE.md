@@ -31,21 +31,23 @@ pm2 restart veo-studio
 Copy `.env.example` to `.env.local` and configure:
 
 ```bash
-# Required for Veo 3.1 video generation via Fal.ai
+# Required for video and image generation via Fal.ai
+FAL_KEY=your_fal_api_key_here
 NEXT_PUBLIC_FAL_KEY=your_fal_api_key_here
 
-# Required for Gemini text generation (story editing, evaluations)
-NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key_here
-
-# Optional for audio transcription in evaluations
-NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
-
-# Required for AI story generation via Agent Hub
+# Required for AI agents (story generation, editing, evaluation)
 AGENT_HUB_API_URL=http://localhost:3000/assistant
 AGENT_HUB_API_KEY=your_agent_hub_api_key_here
+
+# Optional: Base URL for the application
+NEXT_PUBLIC_BASE_URL=http://localhost:3039
 ```
 
-The Fal.ai API key is **required** for video generation. Gemini API key is required for text generation (story editing) and evaluations. Agent Hub credentials are required for AI story creation. OpenAI API key is optional (only needed for audio transcription during evaluation).
+**Required Services:**
+- **Fal.ai**: All video and image generation (Veo 3.1, image editing, character references)
+- **Agent Hub**: All AI logic (story generation, story editing, frame evaluation, audio comparison)
+
+**No Direct LLM Usage:** The application does not use Gemini or OpenAI APIs directly. All AI functionality is routed through Agent Hub agents.
 
 ## Architecture & Key Concepts
 
@@ -71,43 +73,60 @@ The Fal.ai API key is **required** for video generation. Gemini API key is requi
 - `DELETE /api/videos?projectId={id}&sceneId={id}` - Delete a video
 - `POST /api/export` - Concatenate and export all project videos using FFmpeg
 - `POST /api/story/edit` - Single-shot story editing using dual-agent system
+- `GET /api/test-fal` - Test Fal.ai API connection and verify credentials
 - Similar structure for `/api/evaluations` and `/api/projects`
 
-### Dual-Agent Story Editing System
+### Testing Fal.ai API Connection
 
-The story creation flow uses a dual-agent architecture for editing stories:
+To verify your Fal.ai API key is configured correctly:
 
-**1. Script Editing Agent** (`services/scriptEditingAgent.ts`):
-- **Purpose**: Makes precise structural changes to the story JSON
-- **Model**: Gemini 2.0 Flash Thinking Exp (for complex reasoning)
-- **Temperature**: 0.2 (very low for precise edits)
+```bash
+# Test via curl
+curl http://localhost:3039/api/test-fal
+
+# Or visit in browser
+open http://localhost:3039/api/test-fal
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "message": "Fal.ai API connection successful",
+  "apiKey": "37c0f887...69cc",
+  "timestamp": "2025-01-16T..."
+}
+```
+
+If the API key is invalid or missing, you'll see an error response with details.
+
+### Story Editing System - Agent Hub Integration
+
+The story editing flow uses Agent Hub's `story-editor` agent for all story modifications:
+
+**Story Editor Agent** (Agent Hub: `story-editor`):
+- **Purpose**: Edits stories based on user requests and generates explanations
+- **Model**: GPT-4.1-mini (via Agent Hub)
+- **Service**: `services/storyEditingService.ts`
 - **Input**: Current StoryDraft JSON + user's editing request
-- **Output**: Modified StoryDraft JSON with requested changes
+- **Output**: Complete result including:
+  - Modified StoryDraft JSON with requested changes
+  - User-friendly 2-3 sentence explanation
+  - Changes summary (scenes added/removed/modified, title changes)
 - **Capabilities**:
   - Add/remove/reorder scenes
   - Rename characters throughout entire story
   - Modify scene prompts, dialogue, camera angles
   - Maintain story structure and coherence
-- **Prompt Location**: `.agents/script-editing-agent/prompt.md`
-
-**2. Review Agent** (`services/reviewAgent.ts`):
-- **Purpose**: Generates user-friendly explanations of changes
-- **Model**: Gemini 2.0 Flash Exp (for natural language)
-- **Temperature**: 0.7 (medium for conversational tone)
-- **Input**: Original story + refined story + user request
-- **Output**: Friendly 2-3 sentence explanation of changes
-- **Capabilities**:
-  - Analyzes structural changes (scenes added/removed/modified)
-  - Detects title and character name changes
-  - Generates specific, helpful responses
-- **Prompt Location**: `.agents/review-agent/prompt.md`
+  - Generate clear user feedback about changes
 
 **API Flow** (`/api/story/edit`):
 ```
 1. User sends edit request + current story
-2. Script Editing Agent modifies the story
-3. Review Agent analyzes changes and generates response
-4. Return: {updatedStory, response, changesSummary}
+2. API calls storyEditingService.editStory()
+3. Service sends prompt to Agent Hub story-editor agent
+4. Agent returns: {updatedStory, response, changesSummary}
+5. API returns result to client
 ```
 
 **UI Integration** (`CreateStoryModal.tsx`):
@@ -115,13 +134,11 @@ The story creation flow uses a dual-agent architecture for editing stories:
 - Single-shot editing (each request is independent)
 - Immediate story updates and AI feedback
 
-**Why Dual Agents?**
-- **Separation of concerns**: Structural editing vs. user communication
-- **Optimal model selection**: Thinking model for edits, standard model for responses
-- **Better UX**: Clear explanations of what changed and why
-- **Maintainability**: Agent prompts stored in `.agents/` directory for easy updates
-
-See `docs/STORY_EDIT_API_IMPLEMENTATION.html` for full implementation details and testing results.
+**Why Agent Hub?**
+- **Centralized AI management**: All agents in one platform
+- **Easy prompt updates**: Update agent prompts via Agent Hub UI
+- **Provider flexibility**: Switch LLM providers without code changes
+- **Consistent architecture**: Same pattern for all AI functionality
 
 ### Component Architecture
 
@@ -132,11 +149,20 @@ See `docs/STORY_EDIT_API_IMPLEMENTATION.html` for full implementation details an
 - Handles blob URLs → server URLs conversion after generation
 
 **Services Layer**:
-- `falService.ts` - Fal.ai Veo 3.1 integration for video generation
-- `geminiService.ts` - Gemini AI for text generation (story editing) and evaluations
-- `evaluationService.ts` - Frame extraction, Gemini vision evaluation, Whisper transcription
+- `falService.ts` - Fal.ai Veo 3.1 integration for video and image generation
+- `agentHubService.ts` - Agent Hub integration for all AI agents
+- `storyEditingService.ts` - Story editing via Agent Hub story-editor agent
+- `evaluationService.agentHub.ts` - Frame and audio evaluation via Agent Hub agents
 - `videoStorage.server.ts` - Client-side API wrapper for video persistence
 - `projectStorage.server.ts` - Project metadata persistence
+
+**Agent Hub Agents**:
+- `story-gen-agent` - Generate new stories from user prompts
+- `story-editor` - Edit existing stories based on user feedback
+- `character-design-expert` - Create character design prompts
+- `poses-outfits-expert` - Generate pose and outfit variations
+- `frame-eval-agent` - Evaluate video frames against prompts
+- `audio-comparison-agent` - Compare transcribed audio with expected voiceover
 
 **Modal Components**:
 - `ProjectSettingsModal.tsx` - Configure project name, description, and aspect ratio
@@ -179,11 +205,13 @@ The Reference Selection modal provides a visual interface for choosing the start
 
 ### Evaluation System
 
-Two-part evaluation:
-1. **Visual**: First/last frame analysis using Gemini 2.0 Flash vision
-2. **Audio**: Whisper transcription + Gemini text comparison (optional, requires OpenAI key)
+Evaluation is performed via Agent Hub agents:
+1. **Visual**: First/last frame analysis using Agent Hub's `frame-eval-agent`
+2. **Audio**: Audio comparison using Agent Hub's `audio-comparison-agent` (optional)
 
 Score calculation: `(firstFrameScore + lastFrameScore + audioScore) / 3`
+
+All evaluation logic is in `services/evaluationService.agentHub.ts`.
 
 ## Important Implementation Details
 
@@ -193,7 +221,7 @@ Score calculation: `(firstFrameScore + lastFrameScore + audioScore) / 3`
 - **Landscape references**: Up to 10 landscape orientation references: `character-ref-{1-10}.png` (16:9 aspect ratio)
 - Reference selection modal allows choosing which reference to use as starting frame for each scene
 - First scene defaults to Reference Image 1, subsequent scenes default to "Continue from Previous Shot"
-- References sent as `VideoGenerationReferenceType.ASSET` to Gemini API
+- References uploaded to Fal.ai storage and passed to Veo 3.1 API
 - Must exist before generation (generate button disabled if missing)
 
 ### Video URL Handling
@@ -260,9 +288,10 @@ Project {
 3. Ensure `currentSettings` state includes new options
 
 ### Adding New Evaluation Metrics
-1. Extend `VideoEvaluation` type in `evaluationService.ts`
+1. Extend `VideoEvaluation` type in `evaluationService.agentHub.ts`
 2. Add analysis logic in `evaluateVideo()` function
-3. Update SceneManager evaluation results UI
+3. Update Agent Hub agent prompts for frame-eval-agent and audio-comparison-agent if needed
+4. Update SceneManager evaluation results UI
 
 ### Creating Custom Projects
 Add JSON file to `/data/`:
@@ -328,8 +357,8 @@ Then update `/data/projects.db.json` by adding the project to the `projects` obj
    - Server URL saved (check Network tab)
    - Video persists on page reload
 6. Run evaluation and verify:
-   - Frame analysis displays
-   - Audio transcription works (if OpenAI key provided)
+   - Frame analysis displays (via Agent Hub)
+   - Audio comparison works (via Agent Hub)
    - Overall score calculated
 
 ## Troubleshooting
@@ -344,8 +373,8 @@ Then update `/data/projects.db.json` by adding the project to the `projects` obj
 - Check browser console and network tab for errors
 - Ensure you have sufficient Fal.ai credits
 
-**Evaluation not working**: Verify Gemini API key for frame analysis, OpenAI key for audio (optional)
+**Evaluation not working**: Verify Agent Hub API credentials and ensure frame-eval-agent and audio-comparison-agent exist in Agent Hub
 
-**Story editing not working**: Check Gemini API key and Agent Hub credentials in `.env.local`
+**Story editing not working**: Check Agent Hub credentials and ensure story-editor agent exists in Agent Hub
 
 **Export failing**: Ensure FFmpeg is installed on server/system

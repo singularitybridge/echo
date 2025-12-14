@@ -46,10 +46,10 @@ export async function POST(request: NextRequest) {
       'ideogram-v2',
       'flux-pro-ultra',
       'recraft-v3',
-      'bria-v3',
       'imagen4-ultra',
       'flux-dev',
       'hidream-i1',
+      'nano-banana-pro',
     ];
     const invalidModels = models.filter(
       (model) => !validModels.includes(model as ImageGenerationModel)

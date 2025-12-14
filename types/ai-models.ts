@@ -11,7 +11,8 @@ export type ImageEditingModel =
   | 'flux-kontext'
   | 'qwen-edit'
   | 'seededit'
-  | 'seededit-v4';
+  | 'seededit-v4'
+  | 'nano-banana-pro';
 
 /**
  * Supported AI image generation models
@@ -20,10 +21,10 @@ export type ImageGenerationModel =
   | 'ideogram-v2'
   | 'flux-pro-ultra'
   | 'recraft-v3'
-  | 'bria-v3'
   | 'imagen4-ultra'
   | 'flux-dev'
-  | 'hidream-i1';
+  | 'hidream-i1'
+  | 'nano-banana-pro';
 
 /**
  * Supported AI video generation models

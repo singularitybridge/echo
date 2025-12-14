@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       'qwen-edit',
       'seededit',
       'seededit-v4',
+      'nano-banana-pro',
     ];
     const invalidModels = models.filter(
       (model) => !validModels.includes(model as ImageEditingModel)

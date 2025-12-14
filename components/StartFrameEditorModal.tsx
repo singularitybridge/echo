@@ -15,7 +15,7 @@ interface StartFrameEditorModalProps {
   sceneIndex: number;
   mode: 'generate' | 'edit';
   currentFrameUrl?: string; // For edit mode
-  onPromptGenerated: (prompt: string) => void;
+  onPromptGenerated: (prompt: string) => Promise<string>; // Returns image URL
 }
 
 interface AgentResponse {
@@ -36,10 +36,12 @@ export const StartFrameEditorModal: React.FC<StartFrameEditorModalProps> = ({
   onPromptGenerated,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userRequest, setUserRequest] = useState('');
   const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
   const [response, setResponse] = useState<AgentResponse | null>(null);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -119,10 +121,20 @@ Generate an optimized image prompt for the start frame of scene ${sceneIndex + 1
     }
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (generatedPrompt) {
-      onPromptGenerated(generatedPrompt);
-      onClose();
+      setIsGeneratingImage(true);
+      setError(null);
+      setGeneratedImageUrl(null);
+      try {
+        const imageUrl = await onPromptGenerated(generatedPrompt);
+        setGeneratedImageUrl(imageUrl);
+      } catch (err) {
+        console.error('Error generating image:', err);
+        setError(err instanceof Error ? err.message : 'Failed to generate image');
+      } finally {
+        setIsGeneratingImage(false);
+      }
     }
   };
 
@@ -284,20 +296,68 @@ Generate an optimized image prompt for the start frame of scene ${sceneIndex + 1
               <div className="flex gap-3">
                 <button
                   onClick={handleApply}
-                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
+                  disabled={isGeneratingImage || !!generatedImageUrl}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
                 >
-                  Use This Prompt
+                  {isGeneratingImage ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Generating Image...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Generate Image</span>
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => {
                     setGeneratedPrompt(null);
                     setResponse(null);
+                    setGeneratedImageUrl(null);
                   }}
-                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                  disabled={isGeneratingImage}
+                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 text-gray-700 rounded-lg transition-colors font-medium"
                 >
                   Regenerate
                 </button>
               </div>
+
+              {/* Generated Image Preview */}
+              {generatedImageUrl && (
+                <div className="space-y-3 border-t border-gray-200 pt-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Generated Image Preview
+                  </label>
+                  <div className="relative w-full aspect-[9/16] max-w-sm mx-auto rounded-lg overflow-hidden border-2 border-indigo-200">
+                    <img
+                      src={generatedImageUrl}
+                      alt="Generated start frame"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        onClose();
+                      }}
+                      className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      <span>Use This Image</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setGeneratedImageUrl(null);
+                      }}
+                      className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                    >
+                      Generate Again
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

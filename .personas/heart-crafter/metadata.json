@@ -1,0 +1,29 @@
+{
+  "id": "heart-crafter",
+  "directorName": "Maya Chen",
+  "name": "Heart Crafter",
+  "tagline": "Warmth and wonder in every frame",
+  "bio": "A visionary storyteller who finds universal truth in personal journeys. Chen's vibrant worlds brim with emotional depth and hope.",
+  "avatar": "/personas/avatars/maya-chen.png",
+  "description": "Heartwarming character-driven stories with vibrant colors, emotional depth, and universal themes of growth and connection",
+  "icon": "heart",
+  "color": "green",
+  "characteristics": ["Heartwarming", "Colorful", "Emotional", "Universal"],
+  "visualStyle": {
+    "colorPalette": ["Vibrant primaries", "Warm lighting", "Rich saturation"],
+    "lighting": "Soft, warm, magical golden hour",
+    "composition": "Rule of thirds, dynamic movement, expressive staging",
+    "mood": "Warm, hopeful, magical"
+  },
+  "narrativeStyle": {
+    "pacing": "Emotional beats with comedic relief",
+    "structure": "Three-act hero's journey",
+    "dialogue": "Natural, heartfelt, witty",
+    "themes": ["Family", "Friendship", "Growth", "Finding purpose"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Sweeping crane shots, expressive camera moves, dynamic angles",
+    "editingStyle": "Emotional timing, visual storytelling, montages",
+    "soundDesign": "Orchestral scores, emotional crescendos, playful sound design"
+  }
+}

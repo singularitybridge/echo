@@ -56,7 +56,7 @@ export async function POST(
     }
 
     // Validate type
-    const validTypes = ['character', 'prop', 'location', 'effect'];
+    const validTypes = ['character', 'prop', 'location', 'effect', 'storyboard'];
     if (!validTypes.includes(body.type)) {
       return NextResponse.json(
         { error: `Invalid type. Must be one of: ${validTypes.join(', ')}` },
@@ -71,17 +71,21 @@ export async function POST(
     console.log(`[ASSET UPLOAD DEBUG] Story ID: ${id}, Type: ${body.type}, Filename: ${body.filename}`);
     console.log(`[ASSET UPLOAD DEBUG] Base64 length: ${base64Data.length}, Buffer size: ${buffer.length} bytes`);
 
-    const assetUrl = await storyStorage.saveAsset(
+    const assetPath = await storyStorage.saveAsset(
       id,
       body.type,
       body.filename,
       buffer
     );
 
+    // Return the API URL for serving the asset (not the static file path)
+    const apiUrl = `/api/stories/${id}/assets/${body.type}s/${body.filename}`;
+
     return NextResponse.json({
       success: true,
       storyId: id,
-      assetUrl,
+      assetUrl: apiUrl,
+      url: apiUrl, // API URL for fetching the asset
       assetPath: `stories/${id}/assets/${body.type}s/${body.filename}`,
     });
   } catch (error) {

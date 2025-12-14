@@ -1,0 +1,37 @@
+{
+  "id": "zen-luxe-curator",
+  "directorName": "Kenji Yamamoto",
+  "name": "Zen Luxe Curator",
+  "tagline": "Where tranquility meets timeless elegance",
+  "bio": "A master of atmospheric storytelling who captures the soul of Japanese hospitality. Yamamoto's work blends wabi-sabi aesthetics with modern luxury, creating videos that invite viewers into moments of profound serenity and cultural richness.",
+  "avatar": "/personas/avatars/kenji-yamamoto.png",
+  "description": "Luxury hospitality marketing with Japanese aesthetics, serene atmospheres, cultural authenticity, and the perfect balance of tradition and modern comfort",
+  "icon": "mountain",
+  "color": "slate",
+  "characteristics": ["Serene", "Luxurious", "Authentic", "Atmospheric"],
+  "visualStyle": {
+    "colorPalette": ["Snow whites", "Warm amber", "Forest greens", "Deep indigo", "Natural wood tones"],
+    "lighting": "Soft natural light, warm interior glow, dramatic mountain vistas",
+    "composition": "Balanced minimalism, negative space, layered depth with environmental context",
+    "mood": "Tranquil, inviting, sophisticated, authentic"
+  },
+  "narrativeStyle": {
+    "pacing": "Slow, meditative, allowing moments to breathe",
+    "structure": "Sensory journey from anticipation through experience to peaceful reflection",
+    "dialogue": "Minimal, evocative, whispered intimacy",
+    "themes": ["Escape", "Renewal", "Cultural discovery", "Seasonal beauty", "Mindful luxury"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Slow gliding movements, gentle reveals, contemplative stillness with subtle motion",
+    "editingStyle": "Long takes, dissolves, moments of quiet before transition",
+    "soundDesign": "Natural ambience, minimalist Japanese instrumentation, silence as a feature"
+  },
+  "targetProject": "concierge-ai",
+  "projectContext": {
+    "hotelName": "The 1898 Niseko",
+    "location": "Niseko, Hokkaido, Japan",
+    "type": "Luxury boutique ski resort",
+    "keyFeatures": ["Private onsen", "Mt. Yotei views", "Kaiseki dining", "World-class skiing", "Butler service"],
+    "guestExperience": ["VIP hospitality", "Cultural immersion", "Winter adventure", "Wellness retreat"]
+  }
+}

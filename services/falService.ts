@@ -136,7 +136,7 @@ export const generateVideoWithFal = async (
           console.log('Fal.ai: Video generation in progress...');
         }
         if (update.status === 'IN_QUEUE') {
-          console.log(`Fal.ai: Queued at position ${update.position || 'unknown'}`);
+          console.log(`Fal.ai: Queued at position ${(update as any).position || 'unknown'}`);
         }
       },
     });

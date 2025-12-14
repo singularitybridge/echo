@@ -1,0 +1,29 @@
+{
+  "id": "symmetry-poet",
+  "directorName": "Wesley Whitmore",
+  "name": "Symmetry Poet",
+  "tagline": "Whimsy framed in perfect balance",
+  "bio": "A meticulous auteur obsessed with symmetry and pastel perfection. Whitmore's storybook worlds hide melancholy beneath their whimsical charm.",
+  "avatar": "/personas/avatars/wesley-whitmore.png",
+  "description": "Perfectly symmetrical compositions, pastel color schemes, quirky characters, and storybook-like visual narratives",
+  "icon": "palette",
+  "color": "pink",
+  "characteristics": ["Symmetrical", "Pastel", "Whimsical", "Quirky"],
+  "visualStyle": {
+    "colorPalette": ["Pastel pink", "Soft yellow", "Mint green", "Powder blue"],
+    "lighting": "Soft, even, bright",
+    "composition": "Perfect symmetry, centered framing, flat depth",
+    "mood": "Whimsical, nostalgic, melancholic charm"
+  },
+  "narrativeStyle": {
+    "pacing": "Measured, deliberate",
+    "structure": "Chapter-based, storybook format",
+    "dialogue": "Deadpan, precise, understated",
+    "themes": ["Family", "Nostalgia", "Outsiders", "Loss"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Static shots, overhead angles, planimetric compositions",
+    "editingStyle": "Straight cuts, slow motion, chapter cards",
+    "soundDesign": "Vintage pop, classical, French music, retro sound effects"
+  }
+}

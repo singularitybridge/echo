@@ -31,6 +31,7 @@ import {
 const aspectRatioDisplayNames: Record<AspectRatio, string> = {
   [AspectRatio.LANDSCAPE]: 'Landscape (16:9)',
   [AspectRatio.PORTRAIT]: 'Portrait (9:16)',
+  [AspectRatio.SQUARE]: 'Square (1:1)',
 };
 
 const modeIcons: Record<GenerationMode, React.ReactNode> = {
@@ -619,18 +620,6 @@ const PromptForm: React.FC<PromptFormProps> = ({
             )}
           </div>
         </div>
-        <p className="text-xs text-gray-500 text-center mt-2 px-4">
-          Veo is a paid-only model. You will be charged on your Cloud project. See{' '}
-          <a
-            href="https://ai.google.dev/gemini-api/docs/pricing#veo-3"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-400 hover:underline"
-          >
-            pricing details
-          </a>
-          .
-        </p>
       </form>
     </div>
   );

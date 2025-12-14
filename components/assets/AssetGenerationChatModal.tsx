@@ -7,7 +7,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Sparkles, Check, Loader2, Edit3, Download, ChevronLeft, ChevronRight, ArrowRight, FileText } from 'lucide-react';
 import type { AssetType, AssetProvider } from '@/types/asset';
-import type { AspectRatio } from '@/types/project';
+import { AspectRatio } from '@/types';
 
 interface AssetGenerationChatModalProps {
   isOpen: boolean;

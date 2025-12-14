@@ -7,8 +7,7 @@ import {NextRequest} from 'next/server';
 import {streamText, convertToCoreMessages} from 'ai';
 import {google} from '@ai-sdk/google';
 import {z} from 'zod';
-import {editScript} from '../../../services/scriptEditingAgent';
-import {generateReview} from '../../../services/reviewAgent';
+import {editStory} from '../../../services/storyEditingService';
 import {StoryDraft} from '../../../types/story-creation';
 
 /**
@@ -42,34 +41,26 @@ export async function POST(request: NextRequest) {
     const tools = {
       edit_script: {
         description: 'Use this tool to modify the current story when the user requests changes. This includes adding/removing scenes, renaming characters, changing dialogue, adjusting tone, or any other story modifications. You MUST use this tool for all story editing requests - do not attempt to edit the story yourself.',
-        parameters: z.object({
+        inputSchema: z.object({
           action: z.string().describe('The user\'s exact editing request, such as "rename hero to Maria", "add a new scene", or "remove last scene"'),
         }),
         execute: async ({action}: {action: string}) => {
           console.log('[Chat API] Tool execute: edit_script with action:', action);
 
-          // Step 1: Script Editing Agent - Modify the story
-          console.log('[Chat API] Calling Script Editing Agent...');
-          const refinedStory = await editScript(originalStory, action);
+          // Use Agent Hub story-editor to modify the story
+          console.log('[Chat API] Calling Agent Hub story-editor...');
+          const result = await editStory(originalStory, action);
 
-          // Step 2: Review Agent - Generate user response
-          console.log('[Chat API] Calling Review Agent...');
-          const reviewResult = await generateReview(originalStory, refinedStory, action);
-
-          console.log('[Chat API] Tool execution complete:', {
-            scenesAdded: reviewResult.changesSummary.scenesAdded,
-            scenesRemoved: reviewResult.changesSummary.scenesRemoved,
-            scenesModified: reviewResult.changesSummary.scenesModified,
-          });
+          console.log('[Chat API] Tool execution complete:', result.changesSummary);
 
           // Return tool result with updated story and change summary
           return {
-            scenesAdded: reviewResult.changesSummary.scenesAdded,
-            scenesRemoved: reviewResult.changesSummary.scenesRemoved,
-            scenesModified: reviewResult.changesSummary.scenesModified,
-            titleChanged: reviewResult.changesSummary.titleChanged,
-            updatedStory: refinedStory,
-            reviewResponse: reviewResult.response,
+            scenesAdded: result.changesSummary.scenesAdded,
+            scenesRemoved: result.changesSummary.scenesRemoved,
+            scenesModified: result.changesSummary.scenesModified,
+            titleChanged: result.changesSummary.titleChanged,
+            updatedStory: result.updatedStory,
+            reviewResponse: result.response,
           };
         },
       },
@@ -102,14 +93,10 @@ INSTRUCTIONS:
 - The tool will handle modifying the story structure and generating a response`;
 
     const result = streamText({
-      model: google('gemini-2.0-flash-exp', {apiKey}),
+      model: google('gemini-2.0-flash-exp'),
       messages: coreMessages,
       tools,
-      maxSteps: 5, // Allow up to 5 steps for tool calling and response generation
       system: systemPrompt,
-      onStepFinish: async ({stepType, toolCalls}) => {
-        console.log('[Chat API] Step finished - type:', stepType, 'tool calls:', toolCalls?.length || 0);
-      },
     });
     console.log('[Chat API] streamText called, returning response');
 

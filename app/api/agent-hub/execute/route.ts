@@ -4,6 +4,8 @@
  */
 
 import {NextRequest, NextResponse} from 'next/server';
+import {PersonaService} from '@/services/personaService';
+import type {PersonaId} from '@/types/persona';
 
 interface AgentHubAttachment {
   type: 'url' | 'base64';
@@ -20,6 +22,7 @@ interface ExecuteRequest {
     type: 'json_object';
   };
   attachments?: AgentHubAttachment[];
+  personaId?: string; // Optional director persona ID for style guide injection
 }
 
 /**
@@ -53,6 +56,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[Agent Hub Proxy] Executing assistant:', body.assistantId);
+    console.log('[Agent Hub Proxy] API Key (masked):', AGENT_HUB_API_KEY ? `${AGENT_HUB_API_KEY.substring(0, 8)}...${AGENT_HUB_API_KEY.substring(AGENT_HUB_API_KEY.length - 8)}` : 'MISSING');
+    console.log('[Agent Hub Proxy] API URL:', AGENT_HUB_API_URL);
+
+    // Inject persona guide if provided
+    let enhancedInput = body.userInput;
+    if (body.personaId) {
+      console.log('[Agent Hub Proxy] Injecting persona guide for:', body.personaId);
+
+      // Inject appropriate guide based on assistant type
+      if (body.assistantId === 'character-design-expert') {
+        const personaGuide = await PersonaService.getAssetGenerationGuide(body.personaId as PersonaId);
+        enhancedInput = `${body.userInput}${personaGuide}`;
+        console.log('✨ Injected persona asset generation guide for:', body.personaId);
+      } else if (body.assistantId === 'story-gen-agent' || body.assistantId === 'story-editor') {
+        const personaGuide = await PersonaService.getScriptingGuide(body.personaId as PersonaId);
+        enhancedInput = `${body.userInput}${personaGuide}`;
+        console.log('✨ Injected persona scripting guide for:', body.personaId);
+      }
+      // Add more agent types as needed (e.g., video generation agents)
+    }
 
     const url = `${AGENT_HUB_API_URL}/${body.assistantId}/workspace-execute`;
 
@@ -63,7 +86,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${AGENT_HUB_API_KEY}`,
       },
       body: JSON.stringify({
-        query: body.userInput,
+        query: enhancedInput, // Use enhanced input with persona guide
         responseFormat: body.responseFormat,
         attachments: body.attachments,
       }),

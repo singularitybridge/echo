@@ -16,9 +16,10 @@ import {
   Search,
   Filter,
   Radio,
+  Film,
 } from 'lucide-react';
 import type { Asset, AssetType, AssetLibraryResponse, AssetProvider } from '@/types/asset';
-import type { AspectRatio } from '@/types/project';
+import { AspectRatio } from '@/types';
 import { assetStorage } from '@/services/assetStorage.server';
 import AssetCard from './AssetCard';
 import GenerateAssetModal from './GenerateAssetModal';
@@ -34,7 +35,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
   const router = useRouter();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<AssetType | 'all'>('all');
+  const [selectedType, setSelectedType] = useState<AssetType | 'all' | 'storyboard'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [summary, setSummary] = useState({
     totalAssets: 0,
@@ -68,13 +69,89 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         },
       };
 
-      const response: AssetLibraryResponse = await assetStorage.getAssets(query);
-      setAssets(response.assets);
-      setSummary(response.summary);
+      // Load assets from both asset storage (database) and story storage (storyboards)
+      const [response, storyboardAssets] = await Promise.all([
+        assetStorage.getAssets(query),
+        loadStoryboardAssets(),
+      ]);
+
+      // Combine assets - storyboards only show in "all" view or if filtering by storyboard
+      let combinedAssets = response.assets;
+      if (selectedType === 'all' || selectedType === 'storyboard') {
+        combinedAssets = [...response.assets, ...storyboardAssets];
+      }
+
+      // Apply search filter to storyboards if needed
+      if (searchQuery) {
+        combinedAssets = combinedAssets.filter(
+          (asset) =>
+            asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            asset.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }
+
+      setAssets(combinedAssets);
+
+      // Update summary to include storyboards
+      const storyboardCount = storyboardAssets.length;
+      setSummary({
+        totalAssets: response.summary.totalAssets + storyboardCount,
+        byType: {
+          ...response.summary.byType,
+          storyboard: storyboardCount,
+        } as any,
+      });
     } catch (error) {
       console.error('Failed to load assets:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load storyboard assets from story storage
+  const loadStoryboardAssets = async (): Promise<Asset[]> => {
+    try {
+      const response = await fetch(`/api/stories/${projectId}/assets?type=storyboard`);
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      const storyboardPaths: string[] = data.assets?.storyboards || [];
+
+      // Convert storyboard file paths to Asset objects
+      return storyboardPaths.map((path, index) => {
+        const filename = path.split('/').pop() || `storyboard-${index + 1}`;
+        const sceneMatch = filename.match(/storyboard-scene-(\d+)/);
+        const sceneId = sceneMatch ? `scene-${sceneMatch[1]}` : undefined;
+
+        return {
+          id: `storyboard-${projectId}-${index}`,
+          projectId,
+          type: 'storyboard' as any,
+          category: 'storyboards',
+          name: sceneId ? `Scene ${sceneMatch![1]} Storyboard` : filename.replace('.png', ''),
+          description: sceneId ? `Storyboard frame for scene ${sceneMatch![1]}` : 'Storyboard frame',
+          url: `/api/stories/${projectId}/assets/storyboards/${filename}`,
+          thumbnailUrl: `/api/stories/${projectId}/assets/storyboards/${filename}`,
+          aspectRatio: '16:9',
+          generationPrompt: '',
+          provider: 'fal' as any,
+          tags: ['storyboard'],
+          editHistory: [],
+          relatedAssets: [],
+          usedInScenes: sceneId ? [sceneId] : [],
+          version: 1,
+          parentAssetId: null,
+          format: 'png',
+          width: 0,
+          height: 0,
+          fileSize: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    } catch (error) {
+      console.error('Failed to load storyboard assets:', error);
+      return [];
     }
   };
 
@@ -140,10 +217,11 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         await assetStorage.createAsset({
           projectId,
           type: assetData.type,
+          category: assetData.type + 's',
           name: assetData.name,
           description: assetData.description,
           aspectRatio: assetData.aspectRatio,
-          imageUrl,
+          url: imageUrl,
           thumbnailUrl: imageUrl, // Use same URL for now
           generationPrompt: assetData.prompt,
           provider: assetData.provider,
@@ -151,6 +229,12 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
           editHistory: [],
           relatedAssets: [],
           usedInScenes: [],
+          version: 1,
+          parentAssetId: null,
+          format: 'png',
+          width: 0, // Will be calculated
+          height: 0, // Will be calculated
+          fileSize: assetData.imageBlob.size,
         });
       }
 
@@ -163,7 +247,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
   };
 
   const typeButtons: Array<{
-    value: AssetType | 'all';
+    value: AssetType | 'all' | 'storyboard';
     label: string;
     icon: React.ReactNode;
     count?: number;
@@ -191,6 +275,12 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
       label: 'Locations',
       icon: <MapPin className="w-4 h-4" />,
       count: summary.byType.location,
+    },
+    {
+      value: 'storyboard',
+      label: 'Storyboards',
+      icon: <Film className="w-4 h-4" />,
+      count: (summary.byType as any).storyboard || 0,
     },
   ];
 

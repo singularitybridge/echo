@@ -33,6 +33,7 @@ export const dynamic = 'force-dynamic';
  *   resolution?: string;              // Resolution (default: "720p")
  *   referenceImages?: Array<{base64: string; mimeType: string}>;  // Character references
  *   startFrameDataUrl?: string;       // Start frame for shot continuity
+ *   endFrameDataUrl?: string;         // End frame for transitions and controlled generation
  * }
  *
  * Response:
@@ -42,7 +43,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { models, prompt, aspectRatio, resolution, referenceImages, startFrameDataUrl } = await request.json();
+    const { models, prompt, aspectRatio, resolution, referenceImages, startFrameDataUrl, endFrameDataUrl } = await request.json();
 
     // Validate required parameters
     if (!models || !Array.isArray(models) || models.length === 0) {
@@ -127,6 +128,18 @@ export async function POST(request: NextRequest) {
               };
             }
 
+            // Convert end frame data URL to ImageFile if provided
+            let endFrame: ImageFile | null = null;
+            if (endFrameDataUrl) {
+              const base64Data = endFrameDataUrl.split(',')[1];
+              const mimeType = endFrameDataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
+              const blob = await fetch(endFrameDataUrl).then(r => r.blob());
+              endFrame = {
+                file: new File([blob], 'end-frame.png', { type: mimeType }),
+                base64: base64Data,
+              };
+            }
+
             // Determine generation mode
             let mode: GenerationMode;
             if (startFrame) {
@@ -144,7 +157,7 @@ export async function POST(request: NextRequest) {
               aspectRatio: aspectRatioEnum,
               resolution: resolutionEnum,
               startFrame,
-              endFrame: null,
+              endFrame,
               referenceImages: refImages,
               styleImage: null,
               inputVideo: null,

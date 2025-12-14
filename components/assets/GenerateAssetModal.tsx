@@ -14,7 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import type { AssetType, AssetProvider } from '@/types/asset';
-import type { AspectRatio } from '@/types/project';
+import { AspectRatio } from '@/types';
 import { ImageGenerationModel, ModelGenerationResult } from '@/types/ai-models';
 import { getGenerationModelDefinition } from '@/lib/ai-models';
 import { ModelSelector } from './ModelSelector';
@@ -53,7 +53,16 @@ export default function GenerateAssetModal({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedModels, setSelectedModels] = useState<ImageGenerationModel[]>(['flux-dev']);
+  // Default: all generation models selected (except bria)
+  const [selectedModels, setSelectedModels] = useState<ImageGenerationModel[]>([
+    'flux-dev',
+    'ideogram-v2',
+    'imagen4-ultra',
+    'hidream-i1',
+    'nano-banana-pro',
+    'flux-pro-ultra',
+    'recraft-v3',
+  ]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Multi-model state
@@ -84,7 +93,16 @@ export default function GenerateAssetModal({
       setMessages([]);
       setChatInput('');
       setIsGenerating(false);
-      setSelectedModels(['flux-dev']);
+      // Reset to all models selected (except bria)
+      setSelectedModels([
+        'flux-dev',
+        'ideogram-v2',
+        'imagen4-ultra',
+        'hidream-i1',
+        'nano-banana-pro',
+        'flux-pro-ultra',
+        'recraft-v3',
+      ]);
       setAllResults([]);
       setSelectedResult(null);
       setHoveredPreview(null);
@@ -163,7 +181,7 @@ export default function GenerateAssetModal({
         type: 'prop' as AssetType,
         name: `${modelDef.name} - Generated Asset`,
         description: prompt,
-        aspectRatio: '9:16' as AspectRatio,
+        aspectRatio: AspectRatio.PORTRAIT,
         imageBlob: imageBlob,
         prompt: prompt,
         provider: 'fal' as AssetProvider,
@@ -435,7 +453,7 @@ export default function GenerateAssetModal({
               <ModelSelector
                 mode="generation"
                 selectedModels={selectedModels}
-                onModelsChange={setSelectedModels}
+                onModelsChange={setSelectedModels as any}
               />
             </div>
 

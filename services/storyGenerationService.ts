@@ -5,6 +5,8 @@
 
 import {executeStoryGenAgent} from './agentHubService';
 import {STORY_PROMPTS} from '../constants/storyPrompts';
+import {PersonaService} from './personaService';
+import type {PersonaId} from '@/types/persona';
 import {
   QuickPathParams,
   CustomPathParams,
@@ -40,14 +42,40 @@ const parseAIResponse = (response: string): any => {
  */
 export const generateQuickPathStory = async (
   params: QuickPathParams,
+  personaId?: string,
+  storyGuidance?: string,
 ): Promise<StoryDraft> => {
-  console.log('Generating Quick Path story:', params);
+  console.log('Generating Quick Path story:', params, personaId ? `with persona: ${personaId}` : '', storyGuidance ? `with guidance: "${storyGuidance}"` : '');
 
   // Build prompt by replacing placeholders
-  const prompt = STORY_PROMPTS.quickPath
+  let prompt = STORY_PROMPTS.quickPath
     .replace('{genre}', params.genre)
     .replace('{type}', params.type)
     .replace('{energy}', params.energy);
+
+  // Add user's story guidance if provided
+  if (storyGuidance) {
+    prompt = `${prompt}
+
+---
+
+## USER'S STORY DIRECTION
+
+The user has provided the following guidance for the story they want to tell:
+
+"${storyGuidance}"
+
+Please incorporate this direction into the story while maintaining the selected director's style and the genre/type/energy parameters. The user's vision should be the primary influence on the story concept, characters, and narrative arc.`;
+    console.log('✨ Added user story guidance to prompt');
+  }
+
+  // Inject persona guides if provided
+  if (personaId) {
+    const scriptingGuide = await PersonaService.getScriptingGuide(personaId as PersonaId);
+    const videoGuide = await PersonaService.getVideoGenerationGuide(personaId as PersonaId);
+    prompt = `${prompt}${scriptingGuide}${videoGuide}`;
+    console.log('✨ Injected persona scripting and video generation guides for:', personaId);
+  }
 
   try {
     // Generate story using Agent Hub (story-gen-agent)
@@ -59,6 +87,11 @@ export const generateQuickPathStory = async (
     // Validate story structure
     if (!story.projectMetadata || !story.scenes || story.scenes.length !== 4) {
       throw new Error('Invalid story structure returned by AI');
+    }
+
+    // Attach persona ID to project metadata
+    if (personaId) {
+      story.projectMetadata.personaId = personaId;
     }
 
     // Attach generation metadata
@@ -84,14 +117,23 @@ export const generateQuickPathStory = async (
  */
 export const generateCustomPathStory = async (
   params: CustomPathParams,
+  personaId?: string,
 ): Promise<StoryDraft> => {
-  console.log('Generating Custom Path story:', params);
+  console.log('Generating Custom Path story:', params, personaId ? `with persona: ${personaId}` : '');
 
   // Build prompt with user input
-  const prompt = STORY_PROMPTS.customPath
+  let prompt = STORY_PROMPTS.customPath
     .replace('{concept}', params.concept)
     .replace('{character}', params.character || 'to be determined by AI')
     .replace('{mood}', params.mood || 'to be determined by AI');
+
+  // Inject persona guides if provided
+  if (personaId) {
+    const scriptingGuide = await PersonaService.getScriptingGuide(personaId as PersonaId);
+    const videoGuide = await PersonaService.getVideoGenerationGuide(personaId as PersonaId);
+    prompt = `${prompt}${scriptingGuide}${videoGuide}`;
+    console.log('✨ Injected persona scripting and video generation guides for:', personaId);
+  }
 
   try {
     // Generate story using Agent Hub (story-gen-agent)
@@ -103,6 +145,11 @@ export const generateCustomPathStory = async (
     // Validate story structure
     if (!story.projectMetadata || !story.scenes || story.scenes.length !== 4) {
       throw new Error('Invalid story structure returned by AI');
+    }
+
+    // Attach persona ID to project metadata
+    if (personaId) {
+      story.projectMetadata.personaId = personaId;
     }
 
     // Attach generation metadata

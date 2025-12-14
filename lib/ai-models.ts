@@ -106,6 +106,24 @@ export const MODEL_DEFINITIONS: Record<ImageEditingModel, ModelDefinition> = {
     estimatedTimeSeconds: 4.0,
     colorAccent: 'violet',
   },
+  'nano-banana-pro': {
+    id: 'nano-banana-pro',
+    name: 'Nano Banana Pro',
+    provider: 'fal.ai',
+    endpoint: 'fal-ai/nano-banana-pro/edit',
+    icon: 'zap',
+    speed: 'fast',
+    tags: ['creative', 'local-edits'],
+    description:
+      'Fast and efficient image editing with strong natural language understanding. Great for quick iterations and creative edits.',
+    useCases: [
+      'Quick creative edits and iterations',
+      'Natural language-guided modifications',
+      'Efficient image transformations',
+    ],
+    estimatedTimeSeconds: 3.0,
+    colorAccent: 'yellow',
+  },
 };
 
 /**
@@ -166,24 +184,6 @@ export const GENERATION_MODEL_DEFINITIONS: Record<ImageGenerationModel, Generati
     estimatedTimeSeconds: 4.5,
     colorAccent: 'pink',
   },
-  'bria-v3': {
-    id: 'bria-v3',
-    name: 'BRIA v3.2',
-    provider: 'BRIA',
-    endpoint: 'bria/text-to-image/3.2',
-    icon: 'image',
-    speed: 'fast',
-    tags: ['creative'],
-    description:
-      'Fast, commercial-safe image generation. Designed for business use with licensed training data.',
-    useCases: [
-      'Commercial marketing materials',
-      'Product visualization',
-      'Brand-safe content creation',
-    ],
-    estimatedTimeSeconds: 3.5,
-    colorAccent: 'green',
-  },
   'imagen4-ultra': {
     id: 'imagen4-ultra',
     name: 'Imagen 4 Ultra',
@@ -237,6 +237,24 @@ export const GENERATION_MODEL_DEFINITIONS: Record<ImageGenerationModel, Generati
     ],
     estimatedTimeSeconds: 4.0,
     colorAccent: 'orange',
+  },
+  'nano-banana-pro': {
+    id: 'nano-banana-pro',
+    name: 'Nano Banana Pro',
+    provider: 'fal.ai',
+    endpoint: 'fal-ai/nano-banana-pro',
+    icon: 'zap',
+    speed: 'fast',
+    tags: ['creative'],
+    description:
+      'Fast and efficient image generation with strong natural language understanding. Great for quick iterations and creative generation.',
+    useCases: [
+      'Quick creative generation and iterations',
+      'Natural language-guided image creation',
+      'Efficient image generation workflows',
+    ],
+    estimatedTimeSeconds: 3.0,
+    colorAccent: 'yellow',
   },
 };
 

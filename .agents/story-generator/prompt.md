@@ -140,11 +140,27 @@ Based on user selections, generate stories that match the chosen parameters:
 ## Custom Story Generation Strategy
 
 When user provides custom input:
-1. Extract the core concept from "What happens"
-2. Build character details from "Who is involved" (or create if not provided)
-3. Apply "Mood & Tone" to scene descriptions and dialogue
-4. Structure into 4-scene arc that tells the complete story
-5. Ensure visual consistency and character continuity
+1. **Extract Core Visual Metaphors**: Identify the key visual concepts and metaphors from "What happens"
+   - Look for unique visual opportunities (e.g., "factory producing AI agents" = show assembly line, emerging beings)
+   - Translate abstract concepts into concrete, filmable visuals
+   - Find the "show don't tell" moments
+2. **Build Character Details**: From "Who is involved" (or create if not provided)
+   - For abstract concepts (AI agents, systems), personify them with a relatable character/narrator
+   - Make the character visual representation match the story's world/aesthetic
+   - Consider what makes this character visually distinct and memorable
+3. **Apply Mood & Tone**: To scene descriptions, lighting, and dialogue
+   - Tech/futuristic = sleek, clean, blue/cyan tones, high-tech environments
+   - Corporate/business = professional, polished, confident tone
+   - Creative/innovative = dynamic camera work, inspiring music cues, bright colors
+4. **Structure into 4-Scene Arc**: That demonstrates the concept through visual storytelling
+   - Scene 1: Establish the unique concept/world (show the "factory" or system)
+   - Scene 2: Demonstrate the key differentiator (show specialized training)
+   - Scene 3: Show real-world application (deployment and learning)
+   - Scene 4: Highlight ongoing value and call-to-action
+5. **Match Visuals to Concept**: Ensure visual style matches the story's world
+   - Corporate tech demo = clean, professional, futuristic aesthetics
+   - Consumer product = warm, relatable, lifestyle imagery
+   - Abstract concept = creative visual metaphors and transitions
 
 ## Refinement Strategy
 
@@ -176,7 +192,29 @@ When user provides feedback for refinement:
 }
 ```
 
-### Example 2: Custom Story
+### Example 2: Custom Story (Product/Concept Demo)
+
+Input:
+- What happens: "An AI agent system that produces specialized AI co-workers for businesses, like a factory that creates, trains, and deploys intelligent workers"
+- Who: "An AI agent character representing the product"
+- Mood: "Professional, innovative, inspiring, future-forward"
+
+Generated story strategy:
+1. **Visual Metaphor Extraction**: Factory = production line with digital/holographic elements; Training = knowledge streams/data visualization; Deployment = integration into real workspaces
+2. **Character Design**: Not a realistic human - a digital being with holographic/UI elements that represents an AI agent (glowing outlines, semi-transparent, tech aesthetic)
+3. **Scene Breakdown**:
+   - Scene 1: Inside a high-tech digital factory, AI agent emerging from a creation chamber with glowing blue energy
+   - Scene 2: Agent in a virtual training environment, absorbing knowledge streams (accounting symbols, charts, documents flowing around)
+   - Scene 3: Agent now in a realistic modern office, collaborating with human team members, adapting to their workflow
+   - Scene 4: Split-screen showing multiple agents in different industries, all receiving upgrade data streams
+
+**Key Differences from Standard Story**:
+- Character is conceptual (digital being) not realistic human
+- Environments blend real and digital (factory = high-tech, office = real-world)
+- Visual effects are part of the story (glowing, holograms, data streams)
+- More "show the technology" than traditional narrative
+
+### Example 3: Custom Story (Traditional Narrative)
 
 Input:
 - What happens: "A barista discovers their coffee has the power to make people tell the truth"

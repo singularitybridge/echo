@@ -26,6 +26,7 @@ const BORDER_COLORS = {
   green: 'border-green-600',
   cyan: 'border-cyan-600',
   orange: 'border-orange-600',
+  yellow: 'border-yellow-600',
 };
 
 const BG_COLORS = {
@@ -37,6 +38,7 @@ const BG_COLORS = {
   green: 'bg-green-50',
   cyan: 'bg-cyan-50',
   orange: 'bg-orange-50',
+  yellow: 'bg-yellow-50',
 };
 
 const TEXT_COLORS = {
@@ -48,6 +50,7 @@ const TEXT_COLORS = {
   green: 'text-green-600',
   cyan: 'text-cyan-600',
   orange: 'text-orange-600',
+  yellow: 'text-yellow-600',
 };
 
 export function ModelSelector({
@@ -58,8 +61,8 @@ export function ModelSelector({
   const allModels = mode === 'editing' ? getAllModels() : getAllGenerationModels();
 
   const toggleModelSelection = (modelId: ImageEditingModel | ImageGenerationModel) => {
-    if (selectedModels.includes(modelId as any)) {
-      onModelsChange?.(selectedModels.filter((m) => m !== modelId));
+    if ((selectedModels as any[]).includes(modelId)) {
+      onModelsChange?.(selectedModels.filter((m) => m !== modelId) as any);
     } else {
       onModelsChange?.([...selectedModels, modelId] as any);
     }
@@ -75,7 +78,7 @@ export function ModelSelector({
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {allModels.map((model) => {
-          const isSelected = selectedModels.includes(model.id);
+          const isSelected = (selectedModels as any[]).includes(model.id);
 
           // Get proper Tailwind classes from mappings
           const borderColor = BORDER_COLORS[model.colorAccent as keyof typeof BORDER_COLORS] || 'border-gray-300';

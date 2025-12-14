@@ -1,0 +1,29 @@
+{
+  "id": "time-architect",
+  "directorName": "Marcus Kane",
+  "name": "Time Architect",
+  "tagline": "Epic scale meets mind-bending narratives",
+  "bio": "A cerebral filmmaker who bends time and reality with IMAX precision. Kane's complex narratives demand attention and reward repeat viewing.",
+  "avatar": "/personas/avatars/marcus-kane.png",
+  "description": "Complex narratives with IMAX-scale cinematography, muted palettes, and cerebral themes exploring time and reality",
+  "icon": "clock",
+  "color": "blue",
+  "characteristics": ["Complex", "Epic", "Cerebral", "IMAX"],
+  "visualStyle": {
+    "colorPalette": ["Muted tones", "Steel blue", "Desaturated"],
+    "lighting": "Natural, soft, realistic",
+    "composition": "Wide IMAX shots, symmetrical framing, depth of field",
+    "mood": "Epic, contemplative, mysterious"
+  },
+  "narrativeStyle": {
+    "pacing": "Deliberate with building tension",
+    "structure": "Layered, non-linear timelines",
+    "dialogue": "Expository, philosophical, technical",
+    "themes": ["Time", "Memory", "Reality", "Morality"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "IMAX widescreen, steady tracking shots, minimal handheld",
+    "editingStyle": "Cross-cutting between timelines, parallel action",
+    "soundDesign": "Hans Zimmer-style orchestral scores, practical sound effects"
+  }
+}

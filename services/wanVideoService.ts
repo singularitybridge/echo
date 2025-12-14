@@ -57,7 +57,7 @@ export async function generateVideoWithWan(
 
     // Extract video URL from result
     // fal.ai returns { video: { url: string }, seed: number }
-    const videoUrl = result.video?.url;
+    const videoUrl = (result as any).video?.url;
     if (!videoUrl) {
       throw new Error('No video URL in wan-2.5-i2v result');
     }

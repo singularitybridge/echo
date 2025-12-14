@@ -61,6 +61,7 @@ export const executeAgent = async (
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('[Agent Hub Service] API route error:', response.status, errorData);
       throw new Error(errorData.error || `API error: ${response.status}`);
     }
 
@@ -199,5 +200,20 @@ export const executeStartFrameEditorAgent = async (
       type: 'json_object',
     },
     attachments: imageAttachment ? [imageAttachment] : undefined,
+  });
+};
+
+/**
+ * Execute storyboard designer agent (for creating scene storyboard frames)
+ */
+export const executeStoryboardDesignerAgent = async (
+  userInput: string,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'storyboard-designer',
+    userInput,
+    responseFormat: {
+      type: 'json_object',
+    },
   });
 };

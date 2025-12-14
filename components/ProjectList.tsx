@@ -96,7 +96,8 @@ const ProjectList: React.FC = () => {
           const firstScene = story.script?.scenes?.[0];
 
           // First priority: Use firstFrameDataUrl if available (start frame of video)
-          if (firstScene?.firstFrameDataUrl) {
+          // Skip blob URLs as they don't persist across sessions
+          if (firstScene?.firstFrameDataUrl && !firstScene.firstFrameDataUrl.startsWith('blob:')) {
             thumbnailMap[project.id] = firstScene.firstFrameDataUrl;
             continue;
           }
@@ -106,13 +107,40 @@ const ProjectList: React.FC = () => {
             thumbnailMap[project.id] = firstScene.videoUrl;
             continue;
           }
+
+          // Third priority: Use attached storyboard asset from first scene
+          const storyboardAsset = firstScene?.attachedAssets?.find(
+            (a: any) => a.role === 'storyboard-frame' && a.url
+          );
+          if (storyboardAsset?.url) {
+            thumbnailMap[project.id] = storyboardAsset.url;
+            continue;
+          }
         }
       } catch (err) {
         // Continue to fallback options
       }
 
       try {
-        // Fallback 1: Character assets from new storage
+        // Fallback 1: Storyboard assets from story storage
+        const storyboardResponse = await fetch(`/api/stories/${project.id}/assets?type=storyboard`);
+        if (storyboardResponse.ok) {
+          const data = await storyboardResponse.json();
+          const storyboardAssets = data.assets?.storyboards || [];
+
+          if (storyboardAssets.length > 0) {
+            const firstAsset = storyboardAssets[0];
+            const filename = firstAsset.split('/').pop();
+            thumbnailMap[project.id] = `/api/stories/${project.id}/assets/storyboards/${filename}`;
+            continue;
+          }
+        }
+      } catch (err) {
+        // Continue to next fallback
+      }
+
+      try {
+        // Fallback 2: Character assets from new storage
         const response = await fetch(`/api/stories/${project.id}/assets?type=character`);
         if (response.ok) {
           const data = await response.json();
@@ -129,7 +157,7 @@ const ProjectList: React.FC = () => {
         // Continue to next fallback
       }
 
-      // Fallback 2: Check old generated-refs location
+      // Fallback 3: Check old generated-refs location
       const isPortrait = project.aspectRatio === '9:16';
       const oldRefPath = isPortrait
         ? `/generated-refs/${project.id}/character-ref-portrait-1.png`
@@ -185,13 +213,27 @@ const ProjectList: React.FC = () => {
       // Create story using new story storage API
       console.log('Creating story with generated assets...');
 
+      // Prepare scenes with storyboard frame references
+      // The storyboard modal already set attachedAssets on each scene
+      const scenesWithAssets = currentStoryDraft.scenes.map((scene, index) => {
+        // Find matching storyboard asset for this scene
+        const storyboardAsset = assets.find(a => a.usedInScenes?.includes(scene.id));
+
+        return {
+          ...scene,
+          // Set referenceMode to use the first attached asset (storyboard frame)
+          referenceMode: storyboardAsset ? 1 : (index === 0 ? 1 : 'previous'),
+          attachedAssets: scene.attachedAssets || [],
+        };
+      });
+
       const storyRequest = {
         title: currentStoryDraft.projectMetadata.title,
         description: currentStoryDraft.projectMetadata.description,
         type: currentStoryDraft.projectMetadata.type,
         character: currentStoryDraft.projectMetadata.character,
         script: {
-          scenes: currentStoryDraft.scenes,
+          scenes: scenesWithAssets,
         },
         config: {
           aspectRatio: currentStoryDraft.projectMetadata.aspectRatio,
@@ -199,7 +241,7 @@ const ProjectList: React.FC = () => {
           defaultResolution: currentStoryDraft.projectMetadata.defaultResolution,
           characterReferences: [],
         },
-        tags: currentStoryDraft.projectMetadata.tags || [],
+        tags: [],
         generationMetadata: currentStoryDraft.generationMetadata,
       };
 
@@ -218,11 +260,17 @@ const ProjectList: React.FC = () => {
 
       console.log('Story created successfully:', storyId);
 
-      // Upload generated assets to story storage
+      // Upload generated storyboard assets to story storage
       if (assets && assets.length > 0) {
-        console.log('Uploading assets to story storage...');
+        console.log('Uploading storyboard assets to story storage...');
 
-        for (const asset of assets) {
+        // Map to track uploaded asset URLs by scene ID
+        const uploadedAssetUrls: Record<string, string> = {};
+
+        for (let i = 0; i < assets.length; i++) {
+          const asset = assets[i];
+          const sceneId = asset.usedInScenes?.[0];
+
           try {
             // Convert blob URL to base64 data URL
             const blobResponse = await fetch(asset.url);
@@ -235,27 +283,70 @@ const ProjectList: React.FC = () => {
               reader.readAsDataURL(blob);
             });
 
+            // Upload as storyboard type with scene reference
+            const filename = sceneId
+              ? `storyboard-${sceneId}.png`
+              : `storyboard-frame-${i + 1}.png`;
+
             const assetResponse = await fetch(`/api/stories/${storyId}/assets`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                type: 'character',
-                filename: `character-ref-${asset.id}.png`,
+                type: 'storyboard',
+                filename,
                 imageBase64: base64,
+                sceneId, // Include scene association
               }),
             });
 
             if (!assetResponse.ok) {
-              console.warn(`Failed to upload asset ${asset.id}`);
+              console.warn(`Failed to upload storyboard asset for ${sceneId || `frame ${i + 1}`}`);
             } else {
-              console.log(`Asset ${asset.id} uploaded successfully`);
+              const uploadResult = await assetResponse.json();
+              console.log(`Storyboard asset uploaded: ${filename}`);
+
+              // Store the uploaded URL for this scene
+              if (sceneId && uploadResult.url) {
+                uploadedAssetUrls[sceneId] = uploadResult.url;
+              }
             }
           } catch (err) {
-            console.warn(`Error uploading asset ${asset.id}:`, err);
+            console.warn(`Error uploading storyboard asset:`, err);
           }
         }
 
-        console.log('Assets uploaded successfully');
+        // Update scenes with the uploaded asset URLs
+        if (Object.keys(uploadedAssetUrls).length > 0) {
+          console.log('Updating scenes with storyboard asset URLs...');
+
+          const updatedScenes = scenesWithAssets.map((scene, index) => {
+            const uploadedUrl = uploadedAssetUrls[scene.id];
+            if (uploadedUrl) {
+              return {
+                ...scene,
+                attachedAssets: [{
+                  assetId: `storyboard-${scene.id}`,
+                  url: uploadedUrl,
+                  role: 'storyboard-frame',
+                  order: 0,
+                }],
+                referenceMode: 1, // Use the storyboard frame as reference
+              };
+            }
+            return scene;
+          });
+
+          // Update the story with scene asset references
+          await fetch(`/api/stories/${storyId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              script: { scenes: updatedScenes },
+            }),
+          });
+        }
+
+        console.log('Storyboard assets uploaded successfully');
       }
 
       // Navigate to the new story
@@ -305,8 +396,8 @@ const ProjectList: React.FC = () => {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="bg-white">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start gap-3">
               <img
@@ -347,7 +438,7 @@ const ProjectList: React.FC = () => {
       </header>
 
       {/* Project Grid */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 pt-28">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => {
             const thumbnail = thumbnails[project.id];
@@ -409,7 +500,7 @@ const ProjectList: React.FC = () => {
                               <span className="truncate">
                                 {typeof project.character === 'string'
                                   ? project.character
-                                  : project.character.name}
+                                  : (project.character as any).name}
                               </span>
                             </div>
                           )}
@@ -457,7 +548,7 @@ const ProjectList: React.FC = () => {
                               <span className="truncate">
                                 {typeof project.character === 'string'
                                   ? project.character
-                                  : project.character.name}
+                                  : (project.character as any).name}
                               </span>
                             </div>
                           )}

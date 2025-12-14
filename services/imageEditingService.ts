@@ -14,11 +14,9 @@ async function uploadImageToFal(imageDataUrl: string): Promise<string> {
   const base64Data = imageDataUrl.split(',')[1];
   const mimeType = imageDataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
   const buffer = Buffer.from(base64Data, 'base64');
+  const blob = new Blob([buffer], { type: mimeType });
 
-  const uploadedImageUrl = await fal.storage.upload(buffer, {
-    contentType: mimeType,
-    fileName: 'image.png',
-  });
+  const uploadedImageUrl = await fal.storage.upload(blob);
 
   return uploadedImageUrl;
 }
@@ -61,7 +59,7 @@ async function generateWithGemini(
       image_urls: [uploadedImageUrl],
       num_images: 1,
       output_format: 'png',
-      aspect_ratio: aspectRatio, // Gemini uses raw format: "9:16", "16:9", etc.
+      aspect_ratio: aspectRatio as "16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "21:9" | "3:2" | "2:3" | "5:4" | "4:5", // Gemini uses raw format: "9:16", "16:9", etc.
     },
   });
 
@@ -88,11 +86,8 @@ async function generateWithFluxKontext(
     input: {
       prompt: enhancedPrompt,
       image_url: uploadedImageUrl,
-      num_inference_steps: 28,
       guidance_scale: 3.5,
       num_images: 1,
-      enable_safety_checker: false,
-      image_size: imageSize,
     },
   });
 
@@ -119,7 +114,7 @@ async function generateWithQwen(
     input: {
       prompt: enhancedPrompt,
       image_url: uploadedImageUrl,
-      image_size: mappedAspectRatio,
+      image_size: mappedAspectRatio as "square" | "landscape_16_9" | "portrait_16_9" | "landscape_4_3" | "portrait_4_3" | "square_hd",
       num_images: 1,
       output_format: 'png',
     },
@@ -168,23 +163,53 @@ async function generateWithSeedEdit(
  */
 async function generateWithSeedEditV4(
   uploadedImageUrl: string,
-  prompt: string
+  prompt: string,
+  aspectRatio: string
 ): Promise<{ imageUrl: string }> {
   const enhancedPrompt = enhancePrompt(prompt);
+  const imageSize = mapAspectRatio(aspectRatio);
 
   const result = await fal.subscribe(
     'fal-ai/bytedance/seedream/v4/edit',
     {
       input: {
-        image_url: uploadedImageUrl,
+        image_urls: [uploadedImageUrl],
         prompt: enhancedPrompt,
+        image_size: imageSize,
       },
     }
   );
 
-  const imageUrl = result.data?.image?.url;
+  const imageUrl = result.data?.images?.[0]?.url;
   if (!imageUrl) {
     throw new Error('No image URL in SeedEdit v4 response');
+  }
+
+  return { imageUrl };
+}
+
+/**
+ * Generate image using Nano Banana Pro
+ */
+async function generateWithNanoBananaPro(
+  uploadedImageUrl: string,
+  prompt: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+
+  const result = await fal.subscribe(
+    'fal-ai/nano-banana-pro/edit',
+    {
+      input: {
+        prompt: enhancedPrompt,
+        image_urls: [uploadedImageUrl],
+      },
+    }
+  );
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in Nano Banana Pro response');
   }
 
   return { imageUrl };
@@ -251,9 +276,18 @@ export async function generateWithModel(
       case 'seededit-v4':
         const seedEditV4Result = await generateWithSeedEditV4(
           uploadedImageUrl,
-          prompt
+          prompt,
+          aspectRatio
         );
         imageUrl = seedEditV4Result.imageUrl;
+        break;
+
+      case 'nano-banana-pro':
+        const nanoBananaResult = await generateWithNanoBananaPro(
+          uploadedImageUrl,
+          prompt
+        );
+        imageUrl = nanoBananaResult.imageUrl;
         break;
 
       default:
