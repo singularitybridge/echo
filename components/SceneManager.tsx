@@ -16,7 +16,8 @@ import { evaluationStorage } from '../services/evaluationStorage.server';
 import { projectStorage } from '../services/projectStorage.server';
 import { frameStorage } from '../services/frameStorage.server';
 import { Project, Scene, GenerationSettings, SceneAssetAttachment } from '../types/project';
-import CharacterDesignChatModal from './CharacterDesignChatModal';
+import StoryboardModal from './StoryboardModal';
+import type { StoryboardFrame } from './StoryboardModal';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
 import { EndFrameSelectionModal } from './EndFrameSelectionModal';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
@@ -31,6 +32,92 @@ import type { Asset } from '@/types/asset';
 import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-models';
 import VideoResultSelectionModal from './VideoResultSelectionModal';
 import { getAllVideoGenerationModels } from '@/lib/ai-models';
+
+/**
+ * Helper function to load attached assets from a scene
+ * Handles both direct URL-based storyboard frames and database assets
+ */
+async function loadAttachedAssets(
+  attachedAssets: SceneAssetAttachment[],
+  projectId: string
+): Promise<GeneratedImage[]> {
+  const assetRefs: GeneratedImage[] = [];
+
+  // Separate assets with direct URLs (storyboard frames) from database assets
+  const assetsWithUrls = attachedAssets.filter(a => a.url);
+  const assetsWithoutUrls = attachedAssets.filter(a => !a.url);
+
+  // Load storyboard frames directly from their URLs
+  for (const attachment of assetsWithUrls) {
+    try {
+      console.log(`Loading storyboard frame from URL: ${attachment.url}`);
+      const response = await fetch(attachment.url!);
+      if (response.ok) {
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => {
+            const base64 = reader.result as string;
+            resolve(base64.split(',')[1]);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        const imageBytes = await base64Promise;
+
+        assetRefs.push({
+          imageBytes,
+          mimeType: blob.type || 'image/png',
+          objectUrl,
+          blob,
+        });
+      }
+    } catch (err) {
+      console.log(`Failed to load storyboard frame: ${attachment.url}`, err);
+    }
+  }
+
+  // Load database assets by ID
+  if (assetsWithoutUrls.length > 0) {
+    const attachedAssetIds = assetsWithoutUrls.map(a => a.assetId);
+    const assetReferences = await AssetLoader.loadSceneAssets(projectId, attachedAssetIds);
+
+    for (const assetRef of assetReferences) {
+      try {
+        const response = await fetch(assetRef.objectUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve) => {
+            reader.onloadend = () => {
+              const base64 = reader.result as string;
+              resolve(base64.split(',')[1]);
+            };
+            reader.readAsDataURL(blob);
+          });
+
+          const imageBytes = await base64Promise;
+
+          assetRefs.push({
+            imageBytes,
+            mimeType: blob.type || 'image/png',
+            objectUrl,
+            blob,
+          });
+        }
+      } catch (err) {
+        console.log(`Failed to load asset ref: ${assetRef.objectUrl}`, err);
+      }
+    }
+  }
+
+  console.log(`Loaded ${assetRefs.length} asset references (${assetsWithUrls.length} storyboard frames, ${assetsWithoutUrls.length} database assets)`);
+  return assetRefs;
+}
 
 interface SceneManagerProps {
   projectId: string;
@@ -464,7 +551,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     loadAssets();
   }, [projectId]);
 
-  // Load combined references (assets + character refs) when scene changes
+  // Load combined references (assets + character refs + storyboard assets) when scene changes
   useEffect(() => {
     const loadCombinedRefs = async () => {
       if (!project || !selectedSceneId) {
@@ -480,12 +567,18 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
       // Load ALL project assets for reference picker (not just attached ones)
       // This allows users to select any character variation/pose as the starting frame
-      const allProjectAssets = await AssetLoader.loadProjectAssets(project.id);
+      const [allProjectAssets, storyboardRefs] = await Promise.all([
+        AssetLoader.loadProjectAssets(project.id),
+        AssetLoader.loadStoryboardAssets(project.id),
+      ]);
       const assetGeneratedImages = AssetLoader.assetsToAssetReferences(allProjectAssets);
+
+      // Combine database assets with storyboard assets from story storage
+      const allAssetRefs = [...assetGeneratedImages, ...storyboardRefs];
 
       // Convert AssetLoader GeneratedImage format to full format with blob data for video generation
       const assetRefs: GeneratedImage[] = [];
-      for (const assetImg of assetGeneratedImages) {
+      for (const assetImg of allAssetRefs) {
         try {
           const response = await fetch(assetImg.objectUrl);
           if (response.ok) {
@@ -519,7 +612,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       // Combine all project assets (priority) with legacy character refs (fallback)
       const combined = assetRefs.length > 0 ? assetRefs : characterRefs;
       setCombinedRefs(combined);
-      console.log(`Available assets for scene "${selectedScene.title}": ${assetRefs.length} project assets + ${characterRefs.length} legacy refs = ${combined.length} total`);
+      console.log(`Available assets for scene "${selectedScene.title}": ${assetRefs.length} project assets (incl. storyboards) + ${characterRefs.length} legacy refs = ${combined.length} total`);
     };
 
     loadCombinedRefs();
@@ -1185,47 +1278,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       let startFrameDataUrl: string | undefined;
       let selectedRefs: GeneratedImage[] | undefined;
 
-      // Priority 1: Load attached assets (new system)
+      // Priority 1: Load attached assets (new system - supports both storyboard URLs and database assets)
       let assetRefs: GeneratedImage[] = [];
       if (scene.attachedAssets && scene.attachedAssets.length > 0) {
         console.log(`Loading ${scene.attachedAssets.length} attached assets for scene "${scene.title}"`);
-
-        // Use unified AssetLoader to load scene assets
-        const attachedAssetIds = scene.attachedAssets.map(a => a.assetId);
-        const assetReferences = await AssetLoader.loadSceneAssets(project.id, attachedAssetIds);
-
-        // Convert to full GeneratedImage format with blob data
-        for (const assetRef of assetReferences) {
-          try {
-            const response = await fetch(assetRef.objectUrl);
-            if (response.ok) {
-              const blob = await response.blob();
-              const objectUrl = URL.createObjectURL(blob);
-
-              const reader = new FileReader();
-              const base64Promise = new Promise<string>((resolve) => {
-                reader.onloadend = () => {
-                  const base64 = reader.result as string;
-                  resolve(base64.split(',')[1]);
-                };
-                reader.readAsDataURL(blob);
-              });
-
-              const imageBytes = await base64Promise;
-
-              assetRefs.push({
-                imageBytes,
-                mimeType: blob.type || 'image/png',
-                objectUrl,
-                blob,
-              });
-            }
-          } catch (err) {
-            console.log(`Failed to load asset ref: ${assetRef.objectUrl}`, err);
-          }
-        }
-
-        console.log(`Loaded ${assetRefs.length} asset references`);
+        assetRefs = await loadAttachedAssets(scene.attachedAssets, project.id);
       }
 
       // Priority 2: Use referenceMode if specified
@@ -1421,47 +1478,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       let startFrameDataUrl: string | undefined;
       let selectedRefs: GeneratedImage[] | undefined;
 
-      // Priority 1: Load attached assets (new system)
+      // Priority 1: Load attached assets (new system - supports both storyboard URLs and database assets)
       let assetRefs: GeneratedImage[] = [];
       if (scene.attachedAssets && scene.attachedAssets.length > 0) {
         console.log(`Loading ${scene.attachedAssets.length} attached assets for scene "${scene.title}"`);
-
-        // Use unified AssetLoader to load scene assets
-        const attachedAssetIds = scene.attachedAssets.map(a => a.assetId);
-        const assetReferences = await AssetLoader.loadSceneAssets(project.id, attachedAssetIds);
-
-        // Convert to full GeneratedImage format with blob data
-        for (const assetRef of assetReferences) {
-          try {
-            const response = await fetch(assetRef.objectUrl);
-            if (response.ok) {
-              const blob = await response.blob();
-              const objectUrl = URL.createObjectURL(blob);
-
-              const reader = new FileReader();
-              const base64Promise = new Promise<string>((resolve) => {
-                reader.onloadend = () => {
-                  const base64 = reader.result as string;
-                  resolve(base64.split(',')[1]);
-                };
-                reader.readAsDataURL(blob);
-              });
-
-              const imageBytes = await base64Promise;
-
-              assetRefs.push({
-                imageBytes,
-                mimeType: blob.type || 'image/png',
-                objectUrl,
-                blob,
-              });
-            }
-          } catch (err) {
-            console.log(`Failed to load asset ref: ${assetRef.objectUrl}`, err);
-          }
-        }
-
-        console.log(`Loaded ${assetRefs.length} asset references`);
+        assetRefs = await loadAttachedAssets(scene.attachedAssets, project.id);
       }
 
       // Priority 2: Use referenceMode if specified
@@ -1863,7 +1884,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Top Bar - Fixed Header */}
-      <div className="flex items-center justify-between bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-6">
           {/* Back to Stories Button */}
           <button
@@ -1910,14 +1931,14 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             </button>
           )}
 
-          {/* Character Design Button */}
+          {/* Storyboard Button */}
           {project && (
             <button
               onClick={() => setShowRefsModal(true)}
-              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-              title="Character Design"
+              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="Generate Storyboard"
             >
-              <Sparkles className="w-5 h-5" />
+              <Film className="w-5 h-5" />
             </button>
           )}
 
@@ -1969,7 +1990,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
 
       {/* Main Content Area - 3 Columns */}
-      <div className="flex flex-1 overflow-hidden pb-20">
+      <div className="flex flex-1 overflow-hidden pt-16 pb-20">
         {/* Left Panel - Scenes List (1/4) */}
         <div className="w-1/4 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
 
@@ -2130,13 +2151,19 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               ) : (
                 <div className="flex-1 flex items-center justify-center overflow-hidden">
                   {selectedScene.videoUrl ? (() => {
-                    // Get start frame preview for "continue from previous" mode
+                    // Get start frame preview based on referenceMode
                     const sceneIndex = scenes.findIndex((s) => s.id === selectedScene.id);
                     const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
                     const isPrevious = currentRef === 'previous';
 
                     let startFrameUrl: string | undefined;
-                    if (isPrevious && sceneIndex > 0) {
+                    if (!isPrevious && typeof currentRef === 'number') {
+                      // Use selected reference asset
+                      const refIndex = currentRef - 1;
+                      if (refIndex >= 0 && refIndex < combinedRefs.length) {
+                        startFrameUrl = combinedRefs[refIndex].objectUrl;
+                      }
+                    } else if (isPrevious && sceneIndex > 0) {
                       const previousScene = scenes[sceneIndex - 1];
                       // Support both new lastFrameUrl and legacy lastFrameDataUrl
                       startFrameUrl = previousScene.lastFrameUrl || previousScene.lastFrameDataUrl;
@@ -2472,15 +2499,53 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                               onClick={async () => {
                                 const refIndex = currentRef - 1;
                                 const selectedRef = combinedRefs[refIndex];
+                                const assetId = selectedRef.assetId || selectedRef.id;
 
                               console.log('🎨 [Edit Start Frame] Starting edit for reference:', {
                                 refIndex,
-                                assetId: selectedRef.assetId,
+                                assetId,
                                 objectUrl: selectedRef.objectUrl,
                                 hasAssetId: !!selectedRef.assetId
                               });
 
-                              // Try to fetch the full Asset object directly by ID first
+                              // Check if this is a storyboard/story-storage asset FIRST (skip database fetch)
+                              const isStoryboardAsset = assetId?.startsWith('storyboard-') || assetId?.startsWith('story-ref-');
+
+                              if (isStoryboardAsset && selectedRef.objectUrl) {
+                                console.log('🎨 Creating synthetic asset for storyboard (skipping database):', assetId);
+
+                                // Create a synthetic Asset object for the EditAssetModal
+                                const syntheticAsset: Asset = {
+                                  id: assetId || `storyboard-${Date.now()}`,
+                                  url: selectedRef.objectUrl,
+                                  thumbnailUrl: selectedRef.objectUrl,
+                                  type: 'scene',
+                                  category: 'storyboard',
+                                  name: `Storyboard Frame`,
+                                  description: 'Storyboard frame from story storage',
+                                  provider: 'upload',
+                                  projectId: projectId,
+                                  tags: ['storyboard', 'story-storage'],
+                                  relatedAssets: [],
+                                  usedInScenes: [],
+                                  version: 1,
+                                  parentAssetId: null,
+                                  editHistory: [],
+                                  format: 'png',
+                                  aspectRatio: project?.aspectRatio || '9:16',
+                                  width: 0,
+                                  height: 0,
+                                  fileSize: 0,
+                                  createdAt: new Date(),
+                                  updatedAt: new Date(),
+                                };
+
+                                setAssetToEdit(syntheticAsset);
+                                setShowEditAssetModal(true);
+                                return;
+                              }
+
+                              // Try to fetch the full Asset object directly by ID (only for database assets)
                               if (selectedRef.assetId) {
                                 try {
                                   console.log('📡 Fetching asset by ID:', selectedRef.assetId);
@@ -2547,15 +2612,15 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
                                     setAssetToEdit(parsedAsset);
                                     setShowEditAssetModal(true);
-                                  } else {
-                                    console.warn('⚠️ No matching asset found');
-                                    alert('Failed to load asset for editing. Please try again.');
+                                    return;
                                   }
                                 }
                               } catch (error) {
-                                console.error('❌ Failed to load asset:', error);
-                                alert('Failed to load asset for editing. Please try again.');
+                                console.error('❌ Failed to search assets:', error);
                               }
+
+                              console.warn('⚠️ No matching asset found');
+                              alert('Failed to load asset for editing. Please try again.');
                               }}
                               className="flex-1 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
                               title="Edit this asset with AI"
@@ -3048,9 +3113,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       </div>
       </div>
 
-      {/* Character Design Chat Modal */}
+      {/* Storyboard Modal */}
       {showRefsModal && project && (
-        <CharacterDesignChatModal
+        <StoryboardModal
           isOpen={showRefsModal}
           onClose={() => setShowRefsModal(false)}
           story={{
@@ -3059,9 +3124,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               description: project.description,
               type: project.type as 'short',
               character: typeof project.character === 'string' ? project.character : (project.character as any).name,
-              aspectRatio: '9:16' as const,
+              aspectRatio: (project.aspectRatio || '9:16') as '9:16',
               defaultModel: 'Veo 3.1' as const,
               defaultResolution: '720p' as const,
+              personaId: project.personaId,
             },
             scenes: project.scenes.map(s => ({
               id: s.id,
@@ -3079,9 +3145,37 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             })),
           }}
           projectId={projectId}
-          onCharacterRefsGenerated={async (refUrls) => {
-            // Character refs will be reloaded automatically via useEffect when project updates
+          onStoryboardGenerated={async (frames: StoryboardFrame[]) => {
+            // Storyboard frames saved - reload character refs to pick up new images
+            console.log('📸 Storyboard frames generated:', frames.length);
+            // The storyboard frames are already saved via the modal's upload
+            // Reload the refs to update the UI
+            await loadCharacterRefs();
           }}
+          existingFrames={project.scenes
+            .filter(s => {
+              // Check if scene has storyboard frame attached or imagePrompt data
+              const hasStoryboardFrame = s.attachedAssets?.some(a => a.role === 'storyboard-frame' && a.url);
+              return hasStoryboardFrame || s.imagePrompt;
+            })
+            .map(s => {
+              // Find storyboard frame URL from attached assets
+              const storyboardAsset = s.attachedAssets?.find(a => a.role === 'storyboard-frame' && a.url);
+              return {
+                sceneId: s.id,
+                sceneTitle: s.title,
+                frameDescription: s.prompt,
+                imagePrompt: s.imagePrompt || s.prompt,
+                cameraAngle: s.cameraAngle,
+                mood: s.storyboardMood || 'cinematic',
+                keyElements: [],
+                speechType: (s.speechType || 'voiceover') as 'voiceover' | 'narration',
+                voiceoverText: s.voiceover,
+                imageUrl: storyboardAsset?.url,
+                audioUrl: s.audioUrl,
+              };
+            })
+          }
         />
       )}
 
