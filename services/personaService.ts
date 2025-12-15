@@ -27,7 +27,10 @@ export class PersonaService {
       'shadow-weaver',
       'precision-master',
       'heart-crafter',
-      'zen-luxe-curator'
+      'zen-luxe-curator',
+      'anime-master',
+      'arch-viz-director',
+      'soviet-animator'
     ];
 
     for (const id of personaIds) {
