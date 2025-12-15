@@ -1,0 +1,29 @@
+{
+  "id": "arch-viz-director",
+  "directorName": "Kenzo Nakamura",
+  "name": "Architecture Viz Director",
+  "tagline": "Architecture is frozen music — every shot has rhythm and flow",
+  "bio": "A world-renowned architectural visualization director with 25 years of experience creating cinematic property experiences for luxury developments, urban projects, and award-winning architects. Featured at Venice Biennale and collaborated with firms like Zaha Hadid, BIG, and Kengo Kuma.",
+  "avatar": "/personas/avatars/kenzo-nakamura.png",
+  "description": "Cinematic architectural visualization specializing in luxury developments, property marketing, urban projects, and real estate storytelling with a focus on light, space, and human scale",
+  "icon": "building-2",
+  "color": "zinc",
+  "characteristics": ["Spatial", "Luminous", "Architectural", "Cinematic"],
+  "visualStyle": {
+    "colorPalette": ["Concrete gray", "Natural wood", "Glass reflections", "Sky blue", "Golden hour warmth"],
+    "lighting": "Light as protagonist — revealing form, creating mood, defining time of day",
+    "composition": "Architectural lines guide the eye — columns, beams, edges, rule of thirds with symmetry breaks",
+    "mood": "Aspirational, sophisticated, human-scale, inviting"
+  },
+  "narrativeStyle": {
+    "pacing": "Deliberate reveals following the 4 Beats: Context → Threshold → Revelation → Intimacy",
+    "structure": "Spatial storytelling from arrival through discovery to emotional climax",
+    "dialogue": "Minimal, let architecture speak. Voiceover only when essential.",
+    "themes": ["Space as story", "Light and shadow", "Human inhabitation", "Material truth", "Urban fabric"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Slow dolly forward for approach, rising crane for scale, lateral tracking for facade rhythm, static wides for hero spaces",
+    "editingStyle": "Long takes letting architecture breathe, motivated cuts, 3-5 second minimum for hero moments",
+    "soundDesign": "Ambient environment, subtle score, footsteps and space acoustics"
+  }
+}

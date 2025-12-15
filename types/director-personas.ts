@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Film, Zap, Palette, Ghost, Clock, Heart, Mountain } from 'lucide-react';
+import { Film, Zap, Palette, Ghost, Clock, Heart, Mountain, Sparkles, Building2 } from 'lucide-react';
 
 /**
  * Director persona defining visual style and storytelling approach
@@ -15,7 +15,9 @@ export type DirectorPersona =
   | 'shadow-weaver'     // A24 Horror
   | 'precision-master'  // Fincher
   | 'heart-crafter'     // Pixar
-  | 'zen-luxe-curator'; // Luxury hospitality marketing
+  | 'zen-luxe-curator'  // Luxury hospitality marketing
+  | 'anime-master'      // Japanese anime style
+  | 'arch-viz-director'; // Architectural visualization
 
 export interface StorySample {
   short: string; // Short clickable label (e.g., "a heist gone wrong")
@@ -278,6 +280,72 @@ export const DIRECTOR_PERSONAS: Record<DirectorPersona, PersonaDefinition> = {
       {
         short: 'the chef\'s seasonal journey',
         expanded: 'A master chef sources ingredients from local farmers and fishermen, crafting an omakase experience that tells the story of Hokkaido\'s changing seasons.',
+      },
+    ],
+  },
+
+  'anime-master': {
+    id: 'anime-master',
+    directorName: 'Akira Tanaka',
+    name: 'Anime Master',
+    tagline: 'Emotion in every frame, story in every expression',
+    description: 'Japanese anime storytelling with cinematic western influences. Character expressions carry 70% of the story; dynamic camera angles reveal psychological depth.',
+    bio: 'A seasoned animation director with 20 years of experience in Japanese anime production. Tanaka\'s style blends traditional anime storytelling with cinematic western influences, creating emotionally resonant works.',
+    avatar: '/personas/avatars/akira-tanaka.png',
+    characteristics: ['Expressive', 'Dynamic', 'Emotional', 'Rhythmic'],
+    color: {
+      primary: 'text-rose-600',
+      light: 'bg-rose-50',
+      border: 'border-rose-600',
+      hover: 'hover:border-rose-300',
+    },
+    icon: Sparkles,
+    mappedParams: {
+      genre: 'drama',
+      type: 'character-journey',
+      energy: 'medium',
+    },
+    storySamples: [
+      {
+        short: 'a warrior\'s final stand',
+        expanded: 'A legendary samurai faces his former student in a cherry blossom garden at dusk. Their conflict reflects years of betrayal and love, resolved not in words but in the silence between strikes.',
+      },
+      {
+        short: 'finding light in darkness',
+        expanded: 'A young artist loses her ability to see colors after a tragedy. Through an unexpected friendship with a blind musician, she discovers that emotion itself can paint the world anew.',
+      },
+    ],
+  },
+
+  'arch-viz-director': {
+    id: 'arch-viz-director',
+    directorName: 'Kenzo Nakamura',
+    name: 'Architecture Viz Director',
+    tagline: 'Architecture is frozen music — every shot has rhythm and flow',
+    description: 'Cinematic architectural visualization specializing in luxury developments, property marketing, urban projects, and real estate storytelling with a focus on light, space, and human scale.',
+    bio: 'A world-renowned architectural visualization director with 25 years of experience creating cinematic property experiences for luxury developments, urban projects, and award-winning architects. Featured at Venice Biennale and collaborated with firms like Zaha Hadid, BIG, and Kengo Kuma.',
+    avatar: '/personas/avatars/kenzo-nakamura.png',
+    characteristics: ['Spatial', 'Luminous', 'Architectural', 'Cinematic'],
+    color: {
+      primary: 'text-zinc-600',
+      light: 'bg-zinc-50',
+      border: 'border-zinc-600',
+      hover: 'hover:border-zinc-300',
+    },
+    icon: Building2,
+    mappedParams: {
+      genre: 'drama',
+      type: 'discovery',
+      energy: 'contemplative',
+    },
+    storySamples: [
+      {
+        short: 'a penthouse at golden hour',
+        expanded: 'A couple arrives at a luxury penthouse as the sun sets over the city skyline. Light transforms each room, revealing the architecture\'s true character through shadow and reflection.',
+      },
+      {
+        short: 'the architect\'s vision',
+        expanded: 'An architect walks through her completed masterpiece for the first time. The building breathes with natural light, each space unfolding like a carefully composed symphony.',
       },
     ],
   },
