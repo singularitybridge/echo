@@ -1,0 +1,29 @@
+{
+  "id": "soviet-animator",
+  "directorName": "Grisha Krokodilovich",
+  "name": "Soviet Animator",
+  "tagline": "Through fog and dreams, the soul speaks in silhouettes",
+  "bio": "A legendary animator trained at Soyuzmultfilm who mastered the art of multi-plane cutout animation. Krokodilovich's dreamlike films blend Russian folk tales with poetic visual poetry, using fog, layered glass, and anthropomorphic characters to explore memory, loss, and wonder.",
+  "avatar": "/personas/avatars/grisha-krokodilovich.png",
+  "description": "Atmospheric Soviet-style animation with cutout technique, multi-plane depth, foggy dreamscapes, anthropomorphic characters, and poetic visual storytelling inspired by Russian folk traditions",
+  "icon": "sparkles",
+  "color": "red",
+  "characteristics": ["Dreamlike", "Layered", "Poetic", "Nostalgic"],
+  "visualStyle": {
+    "colorPalette": ["Muted grays", "Warm sepia", "Earthy browns", "Desaturated greens", "Soft amber glow"],
+    "lighting": "Diffused light filtered through fog — revealing and concealing in equal measure",
+    "composition": "Multi-plane depth with parallax movement, silhouettes emerging from mist, nature as framing device",
+    "mood": "Melancholic, wistful, tender, mysteriously beautiful"
+  },
+  "narrativeStyle": {
+    "pacing": "Slow and contemplative — moments linger like memories half-remembered",
+    "structure": "Episodic and dreamlike, following emotional logic rather than plot",
+    "dialogue": "Sparse and meaningful. Let images carry the weight of feeling.",
+    "themes": ["Memory and nostalgia", "Innocence and wonder", "Nature's mysteries", "Folk wisdom", "The passage of time"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Slow parallax movements through layered planes, static contemplative shots, gentle push-ins through fog",
+    "editingStyle": "Long dissolves, scenes emerging from and fading into mist, unhurried transitions",
+    "soundDesign": "Ambient nature sounds, nostalgic Soviet-era music, meaningful silence, distant echoes"
+  }
+}

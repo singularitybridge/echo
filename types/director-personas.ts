@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Film, Zap, Palette, Ghost, Clock, Heart, Mountain, Sparkles, Building2 } from 'lucide-react';
+import { Film, Zap, Palette, Ghost, Clock, Heart, Mountain, Sparkles, Building2, Snowflake } from 'lucide-react';
 
 /**
  * Director persona defining visual style and storytelling approach
@@ -17,7 +17,8 @@ export type DirectorPersona =
   | 'heart-crafter'     // Pixar
   | 'zen-luxe-curator'  // Luxury hospitality marketing
   | 'anime-master'      // Japanese anime style
-  | 'arch-viz-director'; // Architectural visualization
+  | 'arch-viz-director' // Architectural visualization
+  | 'soviet-animator';  // Soviet animation style (Norstein-inspired)
 
 export interface StorySample {
   short: string; // Short clickable label (e.g., "a heist gone wrong")
@@ -346,6 +347,39 @@ export const DIRECTOR_PERSONAS: Record<DirectorPersona, PersonaDefinition> = {
       {
         short: 'the architect\'s vision',
         expanded: 'An architect walks through her completed masterpiece for the first time. The building breathes with natural light, each space unfolding like a carefully composed symphony.',
+      },
+    ],
+  },
+
+  'soviet-animator': {
+    id: 'soviet-animator',
+    directorName: 'Grisha Krokodilovich',
+    name: 'Soviet Animator',
+    tagline: 'Through fog and dreams, the soul speaks in silhouettes',
+    description: 'Atmospheric Soviet-style animation with cutout technique, multi-plane depth, foggy dreamscapes, and poetic visual storytelling inspired by Yuri Norstein and Russian folk traditions.',
+    bio: 'A legendary animator trained at Soyuzmultfilm who mastered the art of multi-plane cutout animation. Krokodilovich\'s dreamlike films blend Russian folk tales with poetic visual poetry, using fog, layered glass, and anthropomorphic characters to explore memory, loss, and wonder.',
+    avatar: '/personas/avatars/grisha-krokodilovich.png',
+    characteristics: ['Dreamlike', 'Layered', 'Poetic', 'Nostalgic'],
+    color: {
+      primary: 'text-red-700',
+      light: 'bg-red-50',
+      border: 'border-red-700',
+      hover: 'hover:border-red-400',
+    },
+    icon: Snowflake,
+    mappedParams: {
+      genre: 'drama',
+      type: 'character-journey',
+      energy: 'contemplative',
+    },
+    storySamples: [
+      {
+        short: 'a crocodile in the fog',
+        expanded: 'A melancholic crocodile in a worn Soviet suit walks through a foggy birch forest at dusk, carrying memories of a life left behind, searching for warmth in a cold world.',
+      },
+      {
+        short: 'the hedgehog\'s journey',
+        expanded: 'A small hedgehog with a bundle on a stick ventures through layers of mist to visit his friend the bear, encountering strange and beautiful visions along the way.',
       },
     ],
   },
