@@ -37,10 +37,10 @@ function mapAspectRatio(aspectRatio: string = '16:9'): string {
 }
 
 /**
- * Enhance prompt with character preservation instructions
+ * Enhance prompt with strong image preservation instructions
  */
 function enhancePrompt(prompt: string): string {
-  return `Edit the image: ${prompt}. Preserve the character's identity and features, only apply the requested changes.`;
+  return `Edit this existing image while strictly preserving the original composition, layout, camera angle, and structure. ${prompt}. IMPORTANT: Keep the same room layout, furniture positions, window placements, and architectural elements. Only modify the style, materials, colors, and lighting as requested. Do NOT generate a completely new image - edit the provided source image.`;
 }
 
 /**
