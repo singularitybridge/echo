@@ -90,14 +90,28 @@ export default function EditAssetModal({
           setVersionHistory([storyboardAsset]);
           setCurrentVersionIndex(0);
 
-          // Initialize with a simple creation message
-          setMessages([
+          // Initialize with creation message and show last edit prompt if available
+          const initialMessages: ChatMessage[] = [
             {
               role: 'assistant',
-              content: `Storyboard frame loaded: ${asset.name}. You can edit this image using AI - describe what changes you'd like to make.`,
-              timestamp: Date.now(),
+              content: `Storyboard frame loaded: ${asset.name}`,
+              timestamp: Date.now() - 1,
             },
-          ]);
+          ];
+
+          // Show the prompt that was used to create/edit this asset
+          if (asset.generationPrompt) {
+            initialMessages.push({
+              role: 'assistant',
+              content: `Last edit prompt: "${asset.generationPrompt}"`,
+              timestamp: Date.now(),
+            });
+          }
+
+          setMessages(initialMessages);
+
+          // Ensure chat input is cleared (prevent browser autocomplete)
+          setChatInput('');
         } else {
           // Regular assets - load from database
           const response = await fetch(`/api/assets/${asset.id}/lineage`);
@@ -119,6 +133,15 @@ export default function EditAssetModal({
                 content: `Asset created: ${version.name}`,
                 timestamp: new Date(version.createdAt).getTime(),
               });
+
+              // Show the generation prompt if this is a new root asset with one
+              if (version.generationPrompt && data.lineage.length === 1) {
+                initialMessages.push({
+                  role: 'assistant',
+                  content: `Last edit prompt: "${version.generationPrompt}"`,
+                  timestamp: new Date(version.createdAt).getTime() + 1,
+                });
+              }
             } else {
               // Subsequent versions - show edit prompts
               const editEntry = version.editHistory[version.editHistory.length - 1];
@@ -137,6 +160,9 @@ export default function EditAssetModal({
             }
           });
           setMessages(initialMessages);
+
+          // Ensure chat input is cleared (prevent browser autocomplete from restoring previous values)
+          setChatInput('');
         }
       } catch (error) {
         console.error('Failed to load version history:', error);
@@ -367,12 +393,21 @@ export default function EditAssetModal({
         }
       } else {
         // Regular assets - create a new asset via the assets API
+        // Get the last edit prompt used for this version
+        let editPrompt = '';
+        if (currentAsset.editHistory?.length > 0) {
+          editPrompt = currentAsset.editHistory[currentAsset.editHistory.length - 1].editPrompt || '';
+        } else if (currentAsset.generationPrompt) {
+          editPrompt = currentAsset.generationPrompt;
+        }
+
         const response = await fetch(`/api/assets/${currentAsset.id}/save-as-new`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageBase64: base64Image,
             metadata: currentAsset,
+            editPrompt,  // Include the edit prompt that was used to create this version
           }),
         });
 
@@ -543,6 +578,7 @@ export default function EditAssetModal({
     if (!chatInput.trim() || isGenerating) return;
 
     const editPrompt = chatInput.trim();
+    const modelsToUse = selectedModels.length > 0 ? selectedModels : ['flux-kontext'] as ImageEditingModel[];
     setChatInput('');
     setIsGenerating(true);
     setSelectedResult(null); // Reset selection when generating new results
@@ -553,7 +589,23 @@ export default function EditAssetModal({
       content: editPrompt,
       timestamp: Date.now(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+
+    // Create initial loading results for all selected models
+    const loadingResults: ModelEditResult[] = modelsToUse.map((model) => ({
+      model,
+      loading: true,
+    }));
+
+    // Add assistant message with loading states immediately
+    const assistantMessageTimestamp = Date.now();
+    const loadingMessage: ChatMessage = {
+      role: 'assistant',
+      content: `Generating with ${modelsToUse.length} model${modelsToUse.length > 1 ? 's' : ''}...`,
+      timestamp: assistantMessageTimestamp,
+      results: loadingResults,
+    };
+
+    setMessages((prev) => [...prev, userMessage, loadingMessage]);
 
     try {
       const currentAsset = versionHistory[currentVersionIndex];
@@ -582,12 +634,12 @@ export default function EditAssetModal({
         img.src = imageDataUrl;
       });
 
-      // Call multi-model API
-      const response = await fetch('/api/edit-image-multi', {
+      // Use streaming API for progressive results
+      const response = await fetch('/api/edit-image-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          models: selectedModels.length > 0 ? selectedModels : ['flux-kontext'],
+          models: modelsToUse,
           imageDataUrl,
           editPrompt,
           aspectRatio,
@@ -607,26 +659,89 @@ export default function EditAssetModal({
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      // Process streaming response
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
 
-      // Add assistant message with results inline
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `Generated ${data.results.length} result${data.results.length > 1 ? 's' : ''}`,
-        timestamp: Date.now(),
-        results: data.results,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completedCount = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+
+              if (event.type === 'result') {
+                completedCount++;
+                const result = event.result as ModelEditResult;
+
+                // Update the specific model's result in the message
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    // Match by both timestamp AND role to avoid collision with user message
+                    if (msg.timestamp !== assistantMessageTimestamp || msg.role !== 'assistant') return msg;
+
+                    const updatedResults = msg.results?.map((r) =>
+                      r.model === result.model ? result : r
+                    );
+
+                    return {
+                      ...msg,
+                      content: `Generated ${completedCount}/${modelsToUse.length} results...`,
+                      results: updatedResults,
+                    };
+                  })
+                );
+              } else if (event.type === 'done') {
+                // Final update - match by both timestamp AND role
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.timestamp === assistantMessageTimestamp && msg.role === 'assistant'
+                      ? {
+                          ...msg,
+                          content: `Generated ${completedCount} result${completedCount > 1 ? 's' : ''}`,
+                        }
+                      : msg
+                  )
+                );
+              }
+            } catch (parseError) {
+              console.error('Failed to parse SSE event:', parseError);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to edit asset:', error);
 
-      // Add error message
-      const errorMessage: ChatMessage = {
-        role: 'assistant',
-        content: error instanceof Error ? error.message : 'Failed to edit asset. Please try again.',
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      // Update the loading message with error - match by both timestamp AND role
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.timestamp === assistantMessageTimestamp && msg.role === 'assistant'
+            ? {
+                ...msg,
+                content: error instanceof Error ? error.message : 'Failed to edit asset. Please try again.',
+                results: modelsToUse.map((model) => ({
+                  model,
+                  error: 'Generation failed',
+                })),
+              }
+            : msg
+        )
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -648,32 +763,38 @@ export default function EditAssetModal({
             <div className="p-2 bg-purple-100 rounded-lg">
               <Sparkles className="w-5 h-5 text-purple-600" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+            <div className="max-w-[50%] min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900 truncate" title={asset.name}>
                 {asset.name}
               </h2>
-              <p className="text-sm text-gray-500">
-                Iterative AI Editing • Chat to refine
-              </p>
+              {asset.description ? (
+                <p className="text-sm text-gray-500 line-clamp-3">
+                  {asset.description}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">
+                  Iterative AI Editing • Chat to refine
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleSaveAsNew}
               disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
               data-debug={JSON.stringify({ isGenerating, isRegenerating, isSaving, currentVersionIndex, historyLength: versionHistory.length })}
             >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
               Save as New
             </button>
             <button
               onClick={handleSave}
               disabled={isGenerating || isRegenerating || isSaving || currentVersionIndex === 0}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
               data-debug={JSON.stringify({ isGenerating, isRegenerating, isSaving, currentVersionIndex, historyLength: versionHistory.length })}
             >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
               Save
             </button>
             <button
@@ -813,7 +934,7 @@ export default function EditAssetModal({
           {/* Right Column: Chat Interface (35%) */}
           <div className="w-[35%] flex flex-col bg-white">
             {/* Model Selection */}
-            <div className="border-b border-gray-200 p-4 bg-gray-50">
+            <div className="border-b border-gray-200 px-3 py-2 bg-gray-50">
               <ModelSelector
                 selectedModels={selectedModels}
                 onModelsChange={setSelectedModels as any}
@@ -931,17 +1052,6 @@ export default function EditAssetModal({
                 </div>
               ))}
 
-              {isGenerating && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-900 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <p className="text-sm">Generating new version...</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {isRegenerating && (
                 <div className="flex justify-start">
                   <div className="bg-purple-100 text-purple-900 rounded-lg p-3">
@@ -978,6 +1088,7 @@ export default function EditAssetModal({
                     }
                   }}
                   disabled={isGenerating || isRegenerating || isLoadingLineage}
+                  autoComplete="off"
                   placeholder="Describe your edit (Enter to send, Shift+Enter for new line)..."
                   rows={1}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm min-h-[40px] max-h-[120px] overflow-y-auto"
