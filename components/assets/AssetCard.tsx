@@ -12,10 +12,11 @@ interface AssetCardProps {
   asset: Asset;
   onDelete: (assetId: string) => void;
   onEdit: (assetId: string) => void;
+  onView?: (asset: Asset) => void;
   onRegenerate?: (asset: Asset) => void;
 }
 
-export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: AssetCardProps) {
+export default function AssetCard({ asset, onDelete, onEdit, onView, onRegenerate }: AssetCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -82,7 +83,7 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
         {/* Overlay with actions (shown on hover) */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
           <button
-            onClick={() => window.open(getCacheBustedUrl(asset.url), '_blank')}
+            onClick={() => onView ? onView(asset) : window.open(getCacheBustedUrl(asset.url), '_blank')}
             className="flex items-center justify-center w-10 h-10 bg-white rounded-full text-gray-700 hover:bg-gray-100 transition-colors"
             title="View full size"
           >
@@ -134,73 +135,16 @@ export default function AssetCard({ asset, onDelete, onEdit, onRegenerate }: Ass
             {asset.provider === 'upload' ? 'Uploaded' : asset.provider.toUpperCase()}
           </span>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-900 mb-1 truncate" title={asset.name}>
-          {asset.name}
-        </h3>
-        {asset.description && (
-          <p className="text-sm text-gray-500 mb-3 line-clamp-2" title={asset.description}>
-            {asset.description}
-          </p>
-        )}
-
-        {/* Generation Prompt - if available */}
-        {asset.generationPrompt && (
-          <div className="mt-3 p-2 bg-gray-50 rounded border border-gray-200">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-gray-700">Prompt</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(asset.generationPrompt!);
-                  setCopiedPrompt(true);
-                  setTimeout(() => setCopiedPrompt(false), 2000);
-                }}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
-                title="Copy prompt"
-              >
-                {copiedPrompt ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
-              </button>
-            </div>
-            <p className="text-xs text-gray-600 line-clamp-3">{asset.generationPrompt}</p>
-          </div>
-        )}
-
-        {/* Tags */}
-        {asset.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {asset.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded"
-              >
-                <Tag className="w-3 h-3" />
-                {tag}
-              </span>
-            ))}
-            {asset.tags.length > 3 && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
-                +{asset.tags.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Meta info */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>
-            {new Date(asset.createdAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            })}
-          </span>
-          {asset.usedInScenes.length > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-500 rounded-full" />
-              Used in {asset.usedInScenes.length} scene{asset.usedInScenes.length !== 1 ? 's' : ''}
-            </span>
+        {/* Title and Description Overlay at Bottom */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 pt-8">
+          <h3 className="font-semibold text-white text-sm mb-0.5 truncate" title={asset.name}>
+            {asset.name}
+          </h3>
+          {asset.description && (
+            <p className="text-xs text-white/80 line-clamp-2" title={asset.description}>
+              {asset.description}
+            </p>
           )}
         </div>
       </div>

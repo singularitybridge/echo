@@ -22,6 +22,7 @@ import type { Asset, AssetType, AssetLibraryResponse, AssetProvider } from '@/ty
 import { AspectRatio } from '@/types';
 import { assetStorage } from '@/services/assetStorage.server';
 import AssetCard from './AssetCard';
+import AssetLightbox from './AssetLightbox';
 import GenerateAssetModal from './GenerateAssetModal';
 import UploadAssetModal from './UploadAssetModal';
 import EditAssetModal from './EditAssetModal';
@@ -47,6 +48,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [lightboxAsset, setLightboxAsset] = useState<Asset | null>(null);
 
   // Load assets on mount
   useEffect(() => {
@@ -123,8 +125,10 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         const sceneMatch = filename.match(/storyboard-scene-(\d+)/);
         const sceneId = sceneMatch ? `scene-${sceneMatch[1]}` : undefined;
 
+        // Use filename in ID for proper deletion support
+        // Format: storyboard__{projectId}__{filename} (double underscore separator)
         return {
-          id: `storyboard-${projectId}-${index}`,
+          id: `storyboard__${projectId}__${filename}`,
           projectId,
           type: 'storyboard' as any,
           category: 'storyboards',
@@ -412,6 +416,7 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
                     setShowEditModal(true);
                   }
                 }}
+                onView={(asset) => setLightboxAsset(asset)}
               />
             ))}
           </div>
@@ -466,6 +471,14 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
         description={deleteError || 'An error occurred'}
         confirmText="OK"
         variant="destructive"
+      />
+
+      {/* Asset Lightbox */}
+      <AssetLightbox
+        asset={lightboxAsset}
+        assets={assets}
+        onClose={() => setLightboxAsset(null)}
+        onNavigate={(asset) => setLightboxAsset(asset)}
       />
     </div>
   );
