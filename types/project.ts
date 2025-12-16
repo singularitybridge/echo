@@ -57,7 +57,7 @@ export interface Scene {
 
   // End frame selection for video generation
   endFrameMode?: 'none' | 'asset' | 'next-shot'; // How to select end frame (default: 'none')
-  endFrameAssetId?: string; // If endFrameMode is 'asset', which asset to use
+  endFrameAssetIndex?: number; // If endFrameMode is 'asset', which asset index to use (1-based, same as referenceMode)
   endFrameUrl?: string; // URL to end frame image (from asset or next shot's first frame)
 
   // Timeline trimming (for frame extraction control)

@@ -110,6 +110,34 @@ export async function DELETE(
   try {
     const { id: assetId } = await params;
 
+    // Handle storyboard assets (synthetic IDs with format: storyboard__{projectId}__{filename})
+    if (assetId.startsWith('storyboard__')) {
+      // Format: storyboard__{projectId}__{filename} (double underscore separator)
+      const parts = assetId.split('__');
+      if (parts.length !== 3) {
+        return NextResponse.json(
+          { error: 'Invalid storyboard asset ID format' },
+          { status: 400 }
+        );
+      }
+      const [, projectId, filename] = parts;
+
+      // Delete the storyboard file from story storage
+      const storyboardPath = join(process.cwd(), 'stories', projectId, 'assets', 'storyboards', filename);
+
+      if (existsSync(storyboardPath)) {
+        await unlink(storyboardPath);
+        console.log(`✅ Deleted storyboard asset: ${storyboardPath}`);
+        return NextResponse.json({ success: true, deleted: storyboardPath });
+      } else {
+        console.log(`⚠️ Storyboard file not found: ${storyboardPath}`);
+        return NextResponse.json(
+          { error: 'Storyboard file not found', path: storyboardPath },
+          { status: 404 }
+        );
+      }
+    }
+
     const asset = await getAsset(assetId);
 
     if (!asset) {

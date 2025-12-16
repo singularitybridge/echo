@@ -137,7 +137,8 @@ export const generateVideo = async (
   }
 
   // Use FRAMES_TO_VIDEO mode when start frame is provided (shot continuity)
-  // Use REFERENCES_TO_VIDEO mode when only references are provided (character consistency)
+  // Use REFERENCES_TO_VIDEO mode when MULTIPLE references are provided (character consistency)
+  // Use FRAMES_TO_VIDEO for single reference - user selected it as "Start Frame"
   // For portrait aspect ratio (9:16), always use FRAMES_TO_VIDEO with single reference
   // because reference-to-video doesn't support aspect_ratio parameter
   // Use TEXT_TO_VIDEO mode otherwise
@@ -145,9 +146,20 @@ export const generateVideo = async (
   if (startFrame) {
     mode = GenerationMode.FRAMES_TO_VIDEO;
   } else if (referenceImages.length > 0) {
-    // For portrait videos, use image-to-video (FRAMES_TO_VIDEO) with first reference only
-    // This ensures correct aspect ratio at the cost of using only 1 reference image
-    if (aspectRatio === AspectRatio.PORTRAIT) {
+    // For single reference image, treat it as a start frame (user explicitly selected it)
+    // This ensures "Start Frame" selection in UI actually uses the image as starting frame
+    if (referenceImages.length === 1) {
+      mode = GenerationMode.FRAMES_TO_VIDEO;
+      // Convert single reference to startFrame
+      const firstRef = referenceImages[0];
+      startFrame = {
+        file: firstRef.file,
+        base64: firstRef.base64,
+      };
+      console.log('Single reference: Using as start frame (user selected as Start Frame)');
+    } else if (aspectRatio === AspectRatio.PORTRAIT) {
+      // For portrait videos with multiple refs, use image-to-video with first reference only
+      // This ensures correct aspect ratio at the cost of using only 1 reference image
       mode = GenerationMode.FRAMES_TO_VIDEO;
       // Convert first reference to startFrame for portrait mode
       const firstRef = referenceImages[0];
@@ -155,8 +167,9 @@ export const generateVideo = async (
         file: firstRef.file,
         base64: firstRef.base64,
       };
-      console.log('Portrait mode: Using first reference as start frame for aspect ratio control');
+      console.log('Portrait mode with multiple refs: Using first reference as start frame');
     } else {
+      // Multiple references in non-portrait mode: use reference-to-video for character consistency
       mode = GenerationMode.REFERENCES_TO_VIDEO;
     }
   } else {

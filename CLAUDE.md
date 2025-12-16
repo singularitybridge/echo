@@ -73,6 +73,9 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3039
 - `DELETE /api/videos?projectId={id}&sceneId={id}` - Delete a video
 - `POST /api/export` - Concatenate and export all project videos using FFmpeg
 - `POST /api/story/edit` - Single-shot story editing using dual-agent system
+- `POST /api/assets/analyze` - AI-powered asset analysis (type, name, description)
+- `POST /api/assets/upload` - Upload asset image with metadata
+- `POST /api/agent-hub/execute` - Internal proxy to Agent Hub (supports vision attachments)
 - `GET /api/test-fal` - Test Fal.ai API connection and verify credentials
 - Similar structure for `/api/evaluations` and `/api/projects`
 
@@ -163,11 +166,13 @@ The story editing flow uses Agent Hub's `story-editor` agent for all story modif
 - `poses-outfits-expert` - Generate pose and outfit variations
 - `frame-eval-agent` - Evaluate video frames against prompts
 - `audio-comparison-agent` - Compare transcribed audio with expected voiceover
+- `asset-analyzer` - Analyze uploaded images to determine asset type (character/prop/location), name, and description
 
 **Modal Components**:
 - `ProjectSettingsModal.tsx` - Configure project name, description, and aspect ratio
 - `ReferenceSelectionModal.tsx` - Visual interface for selecting start frame reference
 - `CharacterRefsModal.tsx` - View all character references for the project
+- `UploadAssetModal.tsx` - Upload and AI-analyze assets (auto-detects type, name, description)
 
 ### Project Settings UI
 

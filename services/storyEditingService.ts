@@ -9,7 +9,7 @@
  */
 
 import { StoryDraft } from '../types/story-creation';
-import { executeStoryEditorAgent } from './agentHubService';
+import { executeStoryEditorAgent, AgentHubAttachment } from './agentHubService';
 import { PersonaService } from './personaService';
 import type { PersonaId } from '@/types/persona';
 
@@ -77,14 +77,23 @@ const mergeEditedStory = (
 
 /**
  * Edit a story using Agent Hub story-editor agent
+ * @param originalStory - The full story to edit
+ * @param editRequest - User's edit request text
+ * @param currentShot - Context about the currently viewed shot (optional)
+ * @param personaId - Persona ID for style guides (optional)
+ * @param referenceImageUrl - URL of the reference image for the current shot (optional)
  */
 export const editStory = async (
   originalStory: StoryDraft,
   editRequest: string,
   currentShot?: { id: string; title: string; duration: number; prompt: string; cameraAngle: string; voiceover: string },
   personaId?: string,
+  referenceImageUrl?: string,
 ): Promise<StoryEditResult> => {
   console.log('[Story Editing Service] Starting edit with Agent Hub', personaId ? `with persona: ${personaId}` : '');
+  if (referenceImageUrl) {
+    console.log('[Story Editing Service] Reference image provided:', referenceImageUrl.substring(0, 100) + '...');
+  }
 
   // Create condensed version to reduce token usage
   const condensedStory = createCondensedStory(originalStory);
@@ -107,12 +116,24 @@ IMPORTANT: When the user says "this shot", "this scene", "the current shot", or 
 `
     : '';
 
+  // Build reference image context if provided
+  const referenceImageContext = referenceImageUrl
+    ? `\nREFERENCE IMAGE:
+An image is attached showing the current visual reference or start frame for this shot.
+IMPORTANT: Carefully analyze the attached image and use it to inform your edits:
+- Consider the visual elements, composition, colors, lighting, and mood in the image
+- If the user's edit request mentions visual aspects, align the prompt with what you see in the image
+- Use the image as context for character appearance, setting, and atmosphere
+- Ensure any prompt modifications maintain consistency with the visual reference
+`
+    : '';
+
   // Construct prompt for the story-editor agent
   let prompt = `You are editing a story based on user feedback. Analyze the changes needed and return both the updated story and a user-friendly explanation.
 
 ORIGINAL STORY:
 ${JSON.stringify(condensedStory, null, 2)}
-${currentShotContext}
+${currentShotContext}${referenceImageContext}
 USER'S EDIT REQUEST:
 ${editRequest}
 
@@ -148,7 +169,32 @@ Rules:
   }
 
   try {
-    const responseText = await executeStoryEditorAgent(prompt);
+    // Create image attachment if reference image is provided
+    let imageAttachment: AgentHubAttachment | undefined;
+    if (referenceImageUrl) {
+      // Check if it's a base64 data URL or a regular URL
+      if (referenceImageUrl.startsWith('data:')) {
+        // Extract base64 data from data URL
+        const matches = referenceImageUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          imageAttachment = {
+            type: 'base64',
+            mimeType: matches[1],
+            data: matches[2],
+          };
+        }
+      } else {
+        // Regular URL
+        imageAttachment = {
+          type: 'url',
+          mimeType: 'image/png', // Assume PNG for most cases
+          url: referenceImageUrl,
+        };
+      }
+      console.log('[Story Editing Service] Created image attachment:', imageAttachment?.type);
+    }
+
+    const responseText = await executeStoryEditorAgent(prompt, imageAttachment);
     console.log('[Story Editing Service] Received response from Agent Hub');
 
     // Parse the JSON response

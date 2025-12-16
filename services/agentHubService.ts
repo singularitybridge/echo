@@ -128,9 +128,11 @@ export const executePosesOutfitsAgent = async (
 
 /**
  * Execute story editor agent (for story editing tasks)
+ * Optionally accepts an image attachment for visual context when editing shots
  */
 export const executeStoryEditorAgent = async (
   userInput: string,
+  imageAttachment?: AgentHubAttachment,
 ): Promise<string> => {
   return executeAgent({
     assistantId: 'story-editor',
@@ -138,6 +140,7 @@ export const executeStoryEditorAgent = async (
     responseFormat: {
       type: 'json_object',
     },
+    attachments: imageAttachment ? [imageAttachment] : undefined,
   });
 };
 
@@ -215,5 +218,22 @@ export const executeStoryboardDesignerAgent = async (
     responseFormat: {
       type: 'json_object',
     },
+  });
+};
+
+/**
+ * Execute asset analyzer agent (for analyzing uploaded images)
+ * Returns type, name, and description for the asset
+ */
+export const executeAssetAnalyzerAgent = async (
+  imageAttachment: AgentHubAttachment,
+): Promise<string> => {
+  return executeAgent({
+    assistantId: 'asset-analyzer',
+    userInput: 'Analyze this image and classify it as a video production asset. Return the asset type (character/prop/location), a descriptive name, and a brief description.',
+    responseFormat: {
+      type: 'json_object',
+    },
+    attachments: [imageAttachment],
   });
 };

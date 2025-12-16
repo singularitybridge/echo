@@ -4,23 +4,21 @@
  */
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import {
-  X,
-  Upload,
-  Check,
-  Loader2,
-  Image as ImageIcon,
-  FileImage,
-  Clipboard,
-} from 'lucide-react';
-import type { AssetType } from '@/types/asset';
+import {useState, useRef, useEffect, useCallback} from 'react';
+import {X, Upload, Check, Loader2, FileImage, Clipboard, Sparkles} from 'lucide-react';
+import type {AssetType} from '@/types/asset';
 
 interface UploadAssetModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
   onUploadComplete: () => void;
+}
+
+interface AnalysisResult {
+  type: AssetType;
+  name: string;
+  description: string;
 }
 
 export default function UploadAssetModal({
@@ -35,8 +33,34 @@ export default function UploadAssetModal({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Handle ESC key to close
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !uploading && !analyzing) {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, uploading, analyzing]);
+
+  // Handle click outside to close
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget && !uploading && !analyzing) {
+        onClose();
+      }
+    },
+    [onClose, uploading, analyzing],
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -47,6 +71,7 @@ export default function UploadAssetModal({
       setImageFile(null);
       setImagePreview(null);
       setUploading(false);
+      setAnalyzing(false);
       setDragActive(false);
     }
   }, [isOpen]);
@@ -97,11 +122,10 @@ export default function UploadAssetModal({
 
     setImageFile(file);
 
-    // Auto-generate name from filename if empty
-    if (!name) {
-      const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
-      setName(fileName);
-    }
+    // Clear previous values when new image is uploaded
+    setName('');
+    setDescription('');
+    setAssetType('character');
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -132,9 +156,49 @@ export default function UploadAssetModal({
     }
   };
 
+  const handleAnalyzeWithAI = async () => {
+    if (!imagePreview) return;
+
+    setAnalyzing(true);
+
+    try {
+      // Extract base64 data and mime type from data URL
+      const [header, base64Data] = imagePreview.split(',');
+      const mimeMatch = header.match(/data:([^;]+);/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+
+      const response = await fetch('/api/assets/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageBase64: base64Data,
+          mimeType,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze image');
+      }
+
+      const result: AnalysisResult = await response.json();
+
+      // Update form with AI-generated values
+      setAssetType(result.type);
+      setName(result.name);
+      setDescription(result.description);
+    } catch (error) {
+      console.error('Failed to analyze image:', error);
+      alert('Failed to analyze image. Please try again.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const handleUpload = async () => {
     if (!imageFile || !name.trim()) {
-      alert('Please select an image and provide a name');
+      alert('Please select an image and generate details with AI first');
       return;
     }
 
@@ -173,41 +237,46 @@ export default function UploadAssetModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-100 rounded-lg">
               <Upload className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Upload Asset</h2>
-              <p className="text-sm text-gray-500">
-                Import images from your computer or clipboard
-              </p>
+              <h2 className="text-lg font-semibold text-gray-900">Upload Asset</h2>
+              <p className="text-sm text-gray-500">Drop an image or paste from clipboard</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            disabled={uploading}
+            disabled={uploading || analyzing}
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* Upload Area */}
+        <div className="p-5 overflow-y-auto flex-1">
           {!imagePreview ? (
+            /* Upload Area */
             <div
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+              className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
                 dragActive
                   ? 'border-indigo-600 bg-indigo-50'
                   : 'border-gray-300 hover:border-gray-400 bg-gray-50'
@@ -221,9 +290,7 @@ export default function UploadAssetModal({
                   <p className="text-sm font-medium text-gray-900">
                     Drop your image here, or click to browse
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    PNG, JPG, WebP up to 10MB
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, WebP up to 10MB</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Clipboard className="w-4 h-4" />
@@ -239,86 +306,85 @@ export default function UploadAssetModal({
               />
             </div>
           ) : (
-            // Image Preview
-            <div className="space-y-4">
-              <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                <img
-                  src={imagePreview}
-                  alt="Preview"
-                  className="w-full h-full object-contain"
-                />
+            /* Image Preview with Details - Side by Side Layout */
+            <div className="flex gap-5">
+              {/* Image Preview - 9:16 Aspect Ratio */}
+              <div className="relative flex-shrink-0 w-48">
+                <div className="aspect-[9/16] bg-gray-100 rounded-lg overflow-hidden">
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                </div>
                 <button
                   onClick={() => {
                     setImageFile(null);
                     setImagePreview(null);
+                    setName('');
+                    setDescription('');
                   }}
-                  disabled={uploading}
-                  className="absolute top-2 right-2 p-2 bg-white rounded-lg shadow-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  disabled={uploading || analyzing}
+                  className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-md shadow hover:bg-white transition-colors disabled:opacity-50"
                 >
                   <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
 
-              {/* Metadata Form */}
-              <div className="space-y-4">
-                {/* Asset Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Asset Type
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {(['character', 'prop', 'location'] as AssetType[]).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setAssetType(type)}
-                        disabled={uploading}
-                        className={`p-3 border-2 rounded-lg transition-all ${
-                          assetType === type
-                            ? 'border-indigo-600 bg-indigo-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <div className="flex flex-col items-center gap-2">
-                          <ImageIcon className="w-5 h-5 text-gray-600" />
-                          <span className="text-sm font-medium text-gray-700 capitalize">
-                            {type}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+              {/* Details Section */}
+              <div className="flex-1 flex flex-col">
+                {/* Name and Description Display */}
+                {name ? (
+                  <div className="space-y-3 flex-1">
+                    {/* Asset Type Badge */}
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
+                        assetType === 'character'
+                          ? 'bg-purple-100 text-purple-700'
+                          : assetType === 'prop'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                      }`}
+                    >
+                      {assetType}
+                    </span>
+
+                    {/* Name */}
+                    <h3 className="text-lg font-semibold text-gray-900">{name}</h3>
+
+                    {/* Description */}
+                    <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
                   </div>
-                </div>
+                ) : (
+                  /* Empty State - Prompt to Generate */
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                    <div className="p-3 bg-indigo-50 rounded-full mb-3">
+                      <Sparkles className="w-6 h-6 text-indigo-500" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Click the button below to analyze this image
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      AI will detect type, name, and description
+                    </p>
+                  </div>
+                )}
 
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Name
-                    <span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={uploading}
-                    placeholder="e.g., Orange Cat Character"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                    <span className="text-xs text-gray-500 ml-2">(optional)</span>
-                  </label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    disabled={uploading}
-                    rows={3}
-                    placeholder="Add a description for this asset..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none disabled:opacity-50"
-                  />
+                {/* Generate Button */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={handleAnalyzeWithAI}
+                    disabled={uploading || analyzing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {analyzing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        {name ? 'Re-analyze with AI' : 'Analyze with AI'}
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
@@ -326,31 +392,34 @@ export default function UploadAssetModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            disabled={uploading}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleUpload}
-            disabled={uploading || !imageFile || !name.trim()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                Upload Asset
-              </>
-            )}
-          </button>
+        <div className="flex items-center justify-between p-5 border-t border-gray-200 bg-gray-50">
+          <p className="text-xs text-gray-400">Press ESC to close</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              disabled={uploading || analyzing}
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={uploading || analyzing || !imageFile || !name.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Upload Asset
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

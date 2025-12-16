@@ -317,6 +317,28 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     setShotMessages(prev => [...prev, {role: 'user', content: editRequest, timestamp: Date.now()}]);
 
     try {
+      // Get the reference image URL for the current shot
+      let referenceImageUrl: string | undefined;
+      const sceneIndex = scenes.findIndex(s => s.id === selectedSceneId);
+      const currentRef = selectedScene.referenceMode ?? (sceneIndex === 0 ? 1 : 'previous');
+      const isPrevious = currentRef === 'previous';
+
+      if (isPrevious && sceneIndex > 0) {
+        // Use previous scene's last frame
+        const prevScene = scenes[sceneIndex - 1];
+        if (prevScene?.lastFrameDataUrl) {
+          referenceImageUrl = prevScene.lastFrameDataUrl;
+          console.log('[SceneManager] Using previous shot last frame for edit context');
+        }
+      } else if (typeof currentRef === 'number') {
+        // Use specific reference asset
+        const refIndex = currentRef - 1;
+        if (refIndex >= 0 && refIndex < combinedRefs.length) {
+          referenceImageUrl = combinedRefs[refIndex].objectUrl;
+          console.log('[SceneManager] Using reference asset', currentRef, 'for edit context');
+        }
+      }
+
       // Prepare shot editing request with current shot details
       const shotEditRequest = {
         storyDraft: {
@@ -343,6 +365,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           voiceover: selectedScene.voiceover,
         },
         editRequest,
+        referenceImageUrl,
       };
 
       const response = await fetch('/api/story/edit', {
@@ -1278,14 +1301,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       let startFrameDataUrl: string | undefined;
       let selectedRefs: GeneratedImage[] | undefined;
 
-      // Priority 1: Load attached assets (new system - supports both storyboard URLs and database assets)
-      let assetRefs: GeneratedImage[] = [];
-      if (scene.attachedAssets && scene.attachedAssets.length > 0) {
-        console.log(`Loading ${scene.attachedAssets.length} attached assets for scene "${scene.title}"`);
-        assetRefs = await loadAttachedAssets(scene.attachedAssets, project.id);
-      }
+      // Use combinedRefs (same as UI) - this includes all project assets + storyboard assets
+      // combinedRefs is already loaded and matches what the user sees in the Start Frame modal
+      const availableRefs = combinedRefs.length > 0 ? combinedRefs : characterRefs;
+      console.log(`Available refs for video generation: ${availableRefs.length} (combinedRefs: ${combinedRefs.length}, characterRefs: ${characterRefs.length})`);
 
-      // Priority 2: Use referenceMode if specified
+      // Use referenceMode if specified
       if (scene.referenceMode !== undefined) {
         if (scene.referenceMode === 'previous') {
           // Use previous scene's last frame
@@ -1306,19 +1327,17 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           // Use specific reference image (1-based index)
           const refIndex = scene.referenceMode - 1;
 
-          // Prefer asset refs, fall back to legacy characterRefs
-          const availableRefs = assetRefs.length > 0 ? assetRefs : characterRefs;
-
           if (refIndex >= 0 && refIndex < availableRefs.length) {
             selectedRefs = [availableRefs[refIndex]];
-            console.log(`Using reference ${scene.referenceMode} from ${assetRefs.length > 0 ? 'attached assets' : 'character refs'}`);
+            console.log(`Using reference ${scene.referenceMode} (index ${refIndex}) from ${availableRefs.length} available refs`);
           } else {
-            console.log(`Invalid reference mode ${scene.referenceMode}, using all available references`);
-            selectedRefs = availableRefs.length > 0 ? availableRefs : undefined;
+            console.log(`Invalid reference mode ${scene.referenceMode} (index ${refIndex} out of bounds for ${availableRefs.length} refs), using first reference`);
+            // Fall back to first reference instead of all references (user explicitly selected one)
+            selectedRefs = availableRefs.length > 0 ? [availableRefs[0]] : undefined;
           }
         }
       } else {
-        // Priority 3: Backward compatibility
+        // No referenceMode set - backward compatibility
         if (sceneIndex > 0) {
           const previousScene = scenes[sceneIndex - 1];
           // Support both new lastFrameUrl and legacy lastFrameDataUrl
@@ -1330,15 +1349,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             console.log('Previous scene has no last frame stored');
           }
         } else {
-          console.log('First scene');
-        }
-
-        // Prefer asset refs, fall back to legacy characterRefs
-        const availableRefs = assetRefs.length > 0 ? assetRefs : characterRefs;
-        selectedRefs = availableRefs.length > 0 ? availableRefs : undefined;
-
-        if (selectedRefs) {
-          console.log(`Using ${assetRefs.length > 0 ? 'attached assets' : 'character refs'} (${selectedRefs.length} refs)`);
+          // First scene with no referenceMode - use first available reference
+          selectedRefs = availableRefs.length > 0 ? [availableRefs[0]] : undefined;
+          if (selectedRefs) {
+            console.log(`First scene: using first available reference`);
+          } else {
+            console.log('First scene: no references available');
+          }
         }
       }
 
@@ -1350,10 +1367,31 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       console.log('Generated Veo prompt:', veoPrompt);
       console.log('Using reference images:', hasReferenceImages);
 
-      // Get end frame URL if specified
-      const endFrameDataUrl = scene.endFrameUrl;
+      // Get end frame data based on mode
+      // NOTE: We can't rely on scene.endFrameUrl because it's a blob URL that becomes invalid
+      // Instead, reconstruct from combinedRefs using endFrameAssetIndex
+      let endFrameDataUrl: string | undefined;
+      if (scene.endFrameMode === 'asset' && scene.endFrameAssetIndex && scene.endFrameAssetIndex > 0) {
+        const refIndex = scene.endFrameAssetIndex - 1;
+        if (refIndex >= 0 && refIndex < availableRefs.length) {
+          const endFrameRef = availableRefs[refIndex];
+          // Convert to data URL for video generation
+          endFrameDataUrl = `data:${endFrameRef.mimeType};base64,${endFrameRef.imageBytes}`;
+          console.log(`Using end frame from asset ${scene.endFrameAssetIndex} (index ${refIndex})`);
+        } else {
+          console.log(`Invalid end frame asset index ${scene.endFrameAssetIndex} for ${availableRefs.length} refs`);
+        }
+      } else if (scene.endFrameMode === 'next-shot') {
+        // Use the next scene's first frame
+        const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : undefined;
+        if (nextScene?.firstFrameUrl) {
+          endFrameDataUrl = nextScene.firstFrameUrl;
+          console.log(`Using next shot first frame for transition: ${nextScene.title}`);
+        }
+      }
+
       if (endFrameDataUrl) {
-        console.log('Using end frame for transition:', endFrameDataUrl);
+        console.log('End frame configured for video generation');
       }
 
       // Generate video with optional start/end frames
@@ -1534,10 +1572,23 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       console.log('Generated Veo prompt:', veoPrompt);
       console.log('Using reference images:', hasReferenceImages);
 
-      // Get end frame URL if specified
-      const endFrameDataUrl = scene.endFrameUrl;
-      if (endFrameDataUrl) {
-        console.log('Using end frame for transition (multi-model):', endFrameDataUrl);
+      // Get end frame data based on mode (same logic as single-model generation)
+      // NOTE: We can't rely on scene.endFrameUrl because it's a blob URL that becomes invalid
+      let endFrameDataUrl: string | undefined;
+      const availableRefsForEndFrame = assetRefs.length > 0 ? assetRefs : characterRefs;
+      if (scene.endFrameMode === 'asset' && scene.endFrameAssetIndex && scene.endFrameAssetIndex > 0) {
+        const refIndex = scene.endFrameAssetIndex - 1;
+        if (refIndex >= 0 && refIndex < availableRefsForEndFrame.length) {
+          const endFrameRef = availableRefsForEndFrame[refIndex];
+          endFrameDataUrl = `data:${endFrameRef.mimeType};base64,${endFrameRef.imageBytes}`;
+          console.log(`Multi-model: Using end frame from asset ${scene.endFrameAssetIndex}`);
+        }
+      } else if (scene.endFrameMode === 'next-shot') {
+        const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : undefined;
+        if (nextScene?.firstFrameUrl) {
+          endFrameDataUrl = nextScene.firstFrameUrl;
+          console.log(`Multi-model: Using next shot first frame`);
+        }
       }
 
       // Prepare reference images for API call
@@ -2650,12 +2701,12 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     let label: string = 'None';
                     let icon: React.ReactNode = <Ban size={16} className="text-gray-400 flex-shrink-0" />;
 
-                    if (endFrameMode === 'asset' && selectedScene.endFrameAssetId) {
-                      // Find the asset
-                      const asset = availableAssets.find(a => a.id === selectedScene.endFrameAssetId);
-                      if (asset) {
-                        imageUrl = asset.url;
-                        label = asset.name;
+                    if (endFrameMode === 'asset' && selectedScene.endFrameAssetIndex) {
+                      // Get the asset from combinedRefs (1-based index)
+                      const ref = combinedRefs[selectedScene.endFrameAssetIndex - 1];
+                      if (ref) {
+                        imageUrl = ref.objectUrl;
+                        label = `Asset ${selectedScene.endFrameAssetIndex}`;
                         icon = <ImageIcon size={16} className="text-indigo-600 flex-shrink-0" />;
                       }
                     } else if (endFrameMode === 'next-shot' && nextScene?.firstFrameUrl) {
@@ -3204,6 +3255,52 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               // Try to fetch the full Asset object
               if (selectedRef.assetId) {
                 try {
+                  // Check if this is a storyboard asset (from story storage, not database)
+                  const isStoryboardAsset = selectedRef.assetId.startsWith('storyboard-');
+
+                  if (isStoryboardAsset) {
+                    console.log('🎬 Storyboard asset detected, creating database asset for editing...');
+
+                    // Create a new database asset from the storyboard image
+                    const createResponse = await fetch('/api/assets', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        projectId: project?.id,
+                        type: 'storyboard',
+                        name: `Storyboard ${selectedRef.assetId.replace('storyboard-', '')}`,
+                        description: 'Imported from storyboard for editing',
+                        aspectRatio: project?.aspectRatio || '9:16',
+                        imageUrl: selectedRef.objectUrl,
+                        tags: ['storyboard', 'imported'],
+                      }),
+                    });
+
+                    if (createResponse.ok) {
+                      const newAsset = await createResponse.json();
+                      console.log('✅ Created database asset from storyboard:', newAsset.id);
+
+                      // Parse dates and editHistory
+                      const parsedAsset: Asset = {
+                        ...newAsset,
+                        createdAt: new Date(newAsset.createdAt),
+                        updatedAt: new Date(newAsset.updatedAt),
+                        editHistory: (newAsset.editHistory || []).map((h: any) => ({
+                          ...h,
+                          timestamp: new Date(h.timestamp)
+                        }))
+                      };
+
+                      setAssetToEdit(parsedAsset);
+                      setShowEditAssetModal(true);
+                    } else {
+                      const error = await createResponse.json();
+                      console.error('❌ Failed to create asset from storyboard:', error);
+                      alert('Failed to import storyboard for editing. Please try again.');
+                    }
+                    return;
+                  }
+
                   console.log('📡 Fetching asset by ID:', selectedRef.assetId);
                   const response = await fetch(`/api/assets/${selectedRef.assetId}`);
 
@@ -3365,24 +3462,19 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         <EndFrameSelectionModal
           isOpen={showEndFrameModal}
           onClose={() => setShowEndFrameModal(false)}
-          availableAssets={availableAssets}
+          characterRefs={combinedRefs.map((ref) => ref.objectUrl)}
           selectedEndFrame={selectedScene.endFrameMode ?? 'none'}
-          selectedAssetId={selectedScene.endFrameAssetId}
-          onSelectEndFrame={async (mode, assetId) => {
+          selectedAssetIndex={selectedScene.endFrameAssetIndex}
+          onSelectEndFrame={async (mode, assetIndex) => {
             // Get the end frame URL based on the selected mode
             let endFrameUrl: string | undefined = undefined;
 
-            if (mode === 'asset' && assetId) {
-              // Fetch the asset URL
-              try {
-                const response = await fetch(`/api/assets/${assetId}`);
-                if (response.ok) {
-                  const asset = await response.json();
-                  endFrameUrl = asset.url;
-                  console.log('✅ End frame asset fetched:', { assetId, url: asset.url });
-                }
-              } catch (error) {
-                console.error('❌ Failed to fetch end frame asset:', error);
+            if (mode === 'asset' && assetIndex && assetIndex > 0) {
+              // Get the URL from combinedRefs (1-based index)
+              const ref = combinedRefs[assetIndex - 1];
+              if (ref) {
+                endFrameUrl = ref.objectUrl;
+                console.log('✅ End frame asset selected:', { assetIndex, url: endFrameUrl });
               }
             } else if (mode === 'next-shot') {
               // Use the next scene's first frame
@@ -3405,7 +3497,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                     ? {
                         ...s,
                         endFrameMode: mode,
-                        endFrameAssetId: mode === 'asset' ? assetId : undefined,
+                        endFrameAssetIndex: mode === 'asset' ? assetIndex : undefined,
                         endFrameUrl: endFrameUrl,
                       }
                     : s
@@ -3413,7 +3505,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               };
             });
 
-            console.log('💾 End frame selection saved:', { mode, assetId, endFrameUrl });
+            console.log('💾 End frame selection saved:', { mode, assetIndex, endFrameUrl });
           }}
           nextSceneTitle={
             (() => {

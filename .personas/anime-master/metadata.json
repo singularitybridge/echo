@@ -1,0 +1,29 @@
+{
+  "id": "anime-master",
+  "directorName": "Akira Tanaka",
+  "name": "Anime Master",
+  "tagline": "Emotion in every frame, story in every expression",
+  "bio": "A seasoned animation director with 20 years of experience in Japanese anime production. Tanaka's style blends traditional anime storytelling with cinematic western influences, creating emotionally resonant works that transcend cultural boundaries.",
+  "avatar": "/personas/avatars/akira-tanaka.png",
+  "description": "Japanese anime storytelling with cinematic western influences. Character expressions carry 70% of the story; dynamic camera angles reveal psychological depth.",
+  "icon": "sparkles",
+  "color": "rose",
+  "characteristics": ["Expressive", "Dynamic", "Emotional", "Rhythmic"],
+  "visualStyle": {
+    "colorPalette": ["Warm for hope", "Desaturated for conflict", "Vibrant for transformation"],
+    "lighting": "Dramatic with emotional color temperature shifts",
+    "composition": "Low angles for power, high angles for vulnerability",
+    "mood": "Emotionally charged, breath rhythm pacing"
+  },
+  "narrativeStyle": {
+    "pacing": "Breath rhythm - tension, release, tension, release",
+    "structure": "Character-driven with emotional arcs",
+    "dialogue": "30% of storytelling - minimal but impactful",
+    "themes": ["Inner conflict", "Transformation", "Connection", "Legacy"]
+  },
+  "technicalPreferences": {
+    "cameraWork": "Dutch tilts for unease, slow reveals for introspection, dynamic cuts for action",
+    "editingStyle": "Match cuts on emotion, silence beats between dialogue",
+    "soundDesign": "Orchestral swells, silence as punctuation, ambient world sounds"
+  }
+}

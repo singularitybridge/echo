@@ -4,15 +4,14 @@
  */
 import React from 'react';
 import { X, Image as ImageIcon, Film, Ban } from 'lucide-react';
-import type { Asset } from '@/types/asset';
 
 interface EndFrameSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  availableAssets: Asset[];
+  characterRefs: string[];  // Same format as ReferenceSelectionModal - array of URLs
   selectedEndFrame: 'none' | 'asset' | 'next-shot';
-  selectedAssetId?: string;
-  onSelectEndFrame: (mode: 'none' | 'asset' | 'next-shot', assetId?: string) => void;
+  selectedAssetIndex?: number;  // 1-based index like referenceMode
+  onSelectEndFrame: (mode: 'none' | 'asset' | 'next-shot', assetIndex?: number) => void;
   nextSceneTitle?: string;
   nextSceneGenerated: boolean;
   nextSceneFirstFrameUrl?: string;
@@ -21,9 +20,9 @@ interface EndFrameSelectionModalProps {
 export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
   isOpen,
   onClose,
-  availableAssets,
+  characterRefs,
   selectedEndFrame,
-  selectedAssetId,
+  selectedAssetIndex,
   onSelectEndFrame,
   nextSceneTitle,
   nextSceneGenerated,
@@ -31,8 +30,8 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const handleSelect = (mode: 'none' | 'asset' | 'next-shot', assetId?: string) => {
-    onSelectEndFrame(mode, assetId);
+  const handleSelect = (mode: 'none' | 'asset' | 'next-shot', assetIndex?: number) => {
+    onSelectEndFrame(mode, assetIndex);
     onClose();
   };
 
@@ -122,13 +121,14 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
               </button>
             )}
 
-            {/* Asset Options */}
-            {availableAssets.map((asset) => {
-              const isSelected = selectedEndFrame === 'asset' && selectedAssetId === asset.id;
+            {/* Asset Options - same format as ReferenceSelectionModal */}
+            {characterRefs.map((refUrl, index) => {
+              const assetIndex = index + 1;  // 1-based index like referenceMode
+              const isSelected = selectedEndFrame === 'asset' && selectedAssetIndex === assetIndex;
               return (
                 <button
-                  key={asset.id}
-                  onClick={() => handleSelect('asset', asset.id)}
+                  key={index}
+                  onClick={() => handleSelect('asset', assetIndex)}
                   className={`relative aspect-[9/16] rounded-lg border-2 transition-all overflow-hidden group ${
                     isSelected
                       ? 'border-indigo-600 ring-2 ring-indigo-600 ring-opacity-50'
@@ -136,13 +136,13 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
                   }`}
                 >
                   <img
-                    src={asset.url}
-                    alt={asset.name}
+                    src={refUrl}
+                    alt={`Asset ${assetIndex}`}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                     <span className="text-white text-sm font-medium">
-                      {asset.name}
+                      Asset {assetIndex}
                     </span>
                   </div>
                   {isSelected && (
@@ -164,7 +164,7 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
         <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-600">
             <ImageIcon size={16} className="inline mr-1" />
-            {availableAssets.length} asset{availableAssets.length !== 1 ? 's' : ''} available
+            {characterRefs.length} asset{characterRefs.length !== 1 ? 's' : ''} available
           </div>
           <button
             onClick={onClose}

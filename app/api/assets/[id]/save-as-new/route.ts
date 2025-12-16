@@ -65,6 +65,16 @@ export async function POST(
       imageBuffer = await readFile(sourceImagePath);
     }
 
+    // Get the edit prompt used to create this version
+    // Check for editPrompt in request body first, then fall back to editHistory or generationPrompt
+    let editPromptUsed = body.editPrompt || '';
+    if (!editPromptUsed && sourceAsset.editHistory?.length > 0) {
+      editPromptUsed = sourceAsset.editHistory[sourceAsset.editHistory.length - 1].editPrompt || '';
+    }
+    if (!editPromptUsed) {
+      editPromptUsed = sourceAsset.generationPrompt || '';
+    }
+
     // Create new asset metadata (fresh root asset)
     const newAsset: Asset = {
       ...sourceAsset,
@@ -78,8 +88,8 @@ export async function POST(
       version: 1,
       editHistory: [],
 
-      // Preserve generation context
-      generationPrompt: sourceAsset.generationPrompt || '',
+      // Store the edit prompt that created this image for future reference
+      generationPrompt: editPromptUsed,
       provider: 'ai-edited',
 
       // Update timestamps

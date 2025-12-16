@@ -58,6 +58,10 @@ export async function POST(request: NextRequest) {
     console.log('[Agent Hub Proxy] Executing assistant:', body.assistantId);
     console.log('[Agent Hub Proxy] API Key (masked):', AGENT_HUB_API_KEY ? `${AGENT_HUB_API_KEY.substring(0, 8)}...${AGENT_HUB_API_KEY.substring(AGENT_HUB_API_KEY.length - 8)}` : 'MISSING');
     console.log('[Agent Hub Proxy] API URL:', AGENT_HUB_API_URL);
+    console.log('[Agent Hub Proxy] Attachments:', body.attachments ? `${body.attachments.length} attachment(s), types: ${body.attachments.map(a => `${a.type}/${a.mimeType}`).join(', ')}` : 'none');
+    if (body.attachments?.length) {
+      console.log('[Agent Hub Proxy] First attachment data length:', body.attachments[0].data?.length || 'no data');
+    }
 
     // Inject persona guide if provided
     let enhancedInput = body.userInput;
@@ -77,7 +81,22 @@ export async function POST(request: NextRequest) {
       // Add more agent types as needed (e.g., video generation agents)
     }
 
-    const url = `${AGENT_HUB_API_URL}/${body.assistantId}/workspace-execute`;
+    // Use /execute endpoint for vision/attachments, workspace-execute for text-only
+    const hasAttachments = body.attachments && body.attachments.length > 0;
+    const endpoint = hasAttachments ? 'execute' : 'workspace-execute';
+    const url = `${AGENT_HUB_API_URL}/${body.assistantId}/${endpoint}`;
+
+    console.log('[Agent Hub Proxy] Using endpoint:', endpoint);
+
+    const requestBody = hasAttachments
+      ? {
+          userInput: enhancedInput,
+          attachments: body.attachments,
+        }
+      : {
+          query: enhancedInput,
+          responseFormat: body.responseFormat,
+        };
 
     const response = await fetch(url, {
       method: 'POST',
@@ -85,11 +104,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${AGENT_HUB_API_KEY}`,
       },
-      body: JSON.stringify({
-        query: enhancedInput, // Use enhanced input with persona guide
-        responseFormat: body.responseFormat,
-        attachments: body.attachments,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -107,42 +122,62 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     // Debug: Log the raw response structure
-    console.log('[Agent Hub Proxy] Raw response:', JSON.stringify(data, null, 2));
+    console.log('[Agent Hub Proxy] Raw response:', JSON.stringify(data, null, 2).slice(0, 500));
 
-    // Agent Hub returns {success: true, response: "stringified JSON"}
-    if (!data.success || !data.response) {
-      return NextResponse.json(
-        {success: false, error: 'Agent Hub returned invalid response format'},
-        {status: 500},
-      );
-    }
+    let textContent: string;
 
-    // Parse the stringified response
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(data.response);
-    } catch (e) {
-      console.error('[Agent Hub Proxy] Failed to parse response:', e);
-      return NextResponse.json(
-        {success: false, error: 'Failed to parse Agent Hub response'},
-        {status: 500},
-      );
-    }
+    if (hasAttachments) {
+      // /execute endpoint returns message object directly: {id, role, content: [{type, text: {value}}]}
+      if (!data.content || data.content.length === 0) {
+        return NextResponse.json(
+          {success: false, error: 'Agent Hub returned empty content'},
+          {status: 500},
+        );
+      }
 
-    // Extract text content from parsed response
-    if (!parsedResponse.content || parsedResponse.content.length === 0) {
-      return NextResponse.json(
-        {success: false, error: 'Agent Hub returned empty content'},
-        {status: 500},
-      );
-    }
+      textContent = data.content[0]?.text?.value;
+      if (!textContent) {
+        return NextResponse.json(
+          {success: false, error: 'Agent Hub response missing text value'},
+          {status: 500},
+        );
+      }
+    } else {
+      // workspace-execute returns {success: true, response: "stringified JSON"}
+      if (!data.success || !data.response) {
+        return NextResponse.json(
+          {success: false, error: 'Agent Hub returned invalid response format'},
+          {status: 500},
+        );
+      }
 
-    let textContent = parsedResponse.content[0]?.text?.value;
-    if (!textContent) {
-      return NextResponse.json(
-        {success: false, error: 'Agent Hub response missing text value'},
-        {status: 500},
-      );
+      // Parse the stringified response
+      let parsedResponse;
+      try {
+        parsedResponse = JSON.parse(data.response);
+      } catch (e) {
+        console.error('[Agent Hub Proxy] Failed to parse response:', e);
+        return NextResponse.json(
+          {success: false, error: 'Failed to parse Agent Hub response'},
+          {status: 500},
+        );
+      }
+
+      // Extract text content from parsed response
+      if (!parsedResponse.content || parsedResponse.content.length === 0) {
+        return NextResponse.json(
+          {success: false, error: 'Agent Hub returned empty content'},
+          {status: 500},
+        );
+      }
+
+      textContent = parsedResponse.content[0]?.text?.value;
+      if (!textContent) {
+        return NextResponse.json(
+          {success: false, error: 'Agent Hub response missing text value'},
+          {status: 500},
+        );
+      }
     }
 
     // Strip markdown code fences if present (```json ... ```)

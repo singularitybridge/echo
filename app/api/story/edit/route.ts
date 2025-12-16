@@ -14,7 +14,9 @@ import {StoryDraft} from '../../../../types/story-creation';
  * Request body:
  * {
  *   storyDraft: StoryDraft,
- *   editRequest: string
+ *   editRequest: string,
+ *   currentShot?: { id, title, duration, prompt, cameraAngle, voiceover },
+ *   referenceImageUrl?: string  // URL or base64 data URL of the reference image
  * }
  *
  * Response:
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[Story Edit API] Request received');
 
-    const {storyDraft, editRequest, currentShot} = body;
+    const {storyDraft, editRequest, currentShot, referenceImageUrl} = body;
 
     // Validate inputs
     if (!storyDraft || !storyDraft.projectMetadata || !storyDraft.scenes) {
@@ -58,10 +60,13 @@ export async function POST(request: NextRequest) {
     const personaId = originalStory.projectMetadata.personaId;
 
     console.log('[Story Edit API] Edit request:', action, personaId ? `with persona: ${personaId}` : '');
+    if (referenceImageUrl) {
+      console.log('[Story Edit API] Reference image provided:', referenceImageUrl.substring(0, 50) + '...');
+    }
 
     // Call Agent Hub story-editor agent
     console.log('[Story Edit API] Calling Agent Hub story-editor...');
-    const result = await editStory(originalStory, action, currentShot, personaId);
+    const result = await editStory(originalStory, action, currentShot, personaId, referenceImageUrl);
 
     console.log('[Story Edit API] Edit complete:', result.changesSummary);
 

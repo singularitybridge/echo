@@ -77,3 +77,8 @@ docs/
 temp/
 *.json.tmp
 .vercel
+tsconfig.tsbuildinfo
+
+# Generated content
+public/frames/
+public/test-results/
