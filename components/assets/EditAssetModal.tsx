@@ -57,7 +57,7 @@ export default function EditAssetModal({
   const [selectedModels, setSelectedModels] = useState<ImageEditingModel[]>([
     'gemini-flash',
     'flux-kontext',
-    'qwen-edit',
+    'qwen-edit-2509',
     'seededit',
     'seededit-v4',
     'nano-banana-pro',
@@ -253,7 +253,7 @@ export default function EditAssetModal({
       setSelectedModels([
         'gemini-flash',
         'flux-kontext',
-        'qwen-edit',
+        'qwen-edit-2509',
         'seededit',
         'seededit-v4',
         'nano-banana-pro',

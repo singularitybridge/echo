@@ -57,7 +57,12 @@ export const generateVideoWithFal = async (
         throw error;
       }
     }
-  } else if (params.mode === GenerationMode.FRAMES_TO_VIDEO && params.startFrame) {
+  }
+
+  // Track end frame URL separately for first-last-frame-to-video endpoint
+  let endFrameUrl: string | null = null;
+
+  if (params.mode === GenerationMode.FRAMES_TO_VIDEO && params.startFrame) {
     // For image-to-video mode, use the start frame as the reference image
     try {
       const base64Data = params.startFrame.base64.split(',')[1] || params.startFrame.base64;
@@ -81,6 +86,31 @@ export const generateVideoWithFal = async (
       console.error('Failed to upload start frame:', error);
       throw error;
     }
+
+    // If end frame is provided, upload it too for first-last-frame-to-video
+    if (params.endFrame) {
+      try {
+        const base64Data = params.endFrame.base64.split(',')[1] || params.endFrame.base64;
+        const byteString = atob(base64Data);
+        const arrayBuffer = new ArrayBuffer(byteString.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        for (let i = 0; i < byteString.length; i++) {
+          uint8Array[i] = byteString.charCodeAt(i);
+        }
+
+        const blob = new Blob([uint8Array], { type: params.endFrame.file.type });
+
+        // Upload to Fal.ai storage with unique filename
+        const uniqueFilename = `end-frame-${Date.now()}.png`;
+        const file = new File([blob], uniqueFilename, { type: params.endFrame.file.type });
+        endFrameUrl = await fal.storage.upload(file);
+        console.log(`Uploaded end frame to Fal.ai`);
+      } catch (error) {
+        console.error('Failed to upload end frame:', error);
+        throw error;
+      }
+    }
   }
 
   if (imageUrls.length === 0) {
@@ -99,7 +129,21 @@ export const generateVideoWithFal = async (
     ? 'camera movement, camera motion, camera pan, camera tilt, camera zoom, dolly, tracking shot, crane shot, shaky cam, handheld'
     : undefined;
 
-  if (params.mode === GenerationMode.FRAMES_TO_VIDEO) {
+  if (params.mode === GenerationMode.FRAMES_TO_VIDEO && endFrameUrl) {
+    // Use first-last-frame-to-video endpoint when both start and end frames are provided
+    endpoint = "fal-ai/veo3.1/fast/first-last-frame-to-video";
+    input = {
+      first_frame_url: imageUrls[0], // Start frame
+      last_frame_url: endFrameUrl, // End frame
+      prompt: params.prompt,
+      aspect_ratio: params.aspectRatio === '9:16' ? '9:16' : '16:9',
+      duration,
+      resolution: (params.resolution === '1080p' ? '1080p' : '720p') as '720p' | '1080p',
+      generate_audio: true,
+      ...(negativePrompt && { negative_prompt: negativePrompt }),
+    };
+    console.log('Using first-last-frame-to-video endpoint for transition scene');
+  } else if (params.mode === GenerationMode.FRAMES_TO_VIDEO) {
     // Use image-to-video endpoint for single frame (supports aspect_ratio)
     endpoint = "fal-ai/veo3.1/image-to-video";
     input = {
@@ -131,6 +175,9 @@ export const generateVideoWithFal = async (
   console.log('Resolution:', input.resolution);
   console.log('Aspect Ratio:', params.aspectRatio);
   console.log('Reference images:', imageUrls.length);
+  if (endFrameUrl) {
+    console.log('End Frame URL:', endFrameUrl);
+  }
   console.log('Camera Movement:', params.cameraMovement || 'dynamic');
   if (negativePrompt) {
     console.log('Negative Prompt:', negativePrompt);

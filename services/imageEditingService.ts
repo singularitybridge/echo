@@ -99,34 +99,6 @@ async function generateWithFluxKontext(
   return { imageUrl };
 }
 
-/**
- * Generate image using Qwen Image Edit
- */
-async function generateWithQwen(
-  uploadedImageUrl: string,
-  prompt: string,
-  aspectRatio: string
-): Promise<{ imageUrl: string }> {
-  const enhancedPrompt = enhancePrompt(prompt);
-  const mappedAspectRatio = mapAspectRatio(aspectRatio);
-
-  const result = await fal.subscribe('fal-ai/qwen-image-edit', {
-    input: {
-      prompt: enhancedPrompt,
-      image_url: uploadedImageUrl,
-      image_size: mappedAspectRatio as "square" | "landscape_16_9" | "portrait_16_9" | "landscape_4_3" | "portrait_4_3" | "square_hd",
-      num_images: 1,
-      output_format: 'png',
-    },
-  });
-
-  const imageUrl = result.data?.images?.[0]?.url;
-  if (!imageUrl) {
-    throw new Error('No image URL in Qwen response');
-  }
-
-  return { imageUrl };
-}
 
 /**
  * Generate image using SeedEdit v3
@@ -216,6 +188,180 @@ async function generateWithNanoBananaPro(
 }
 
 /**
+ * Generate image using FLUX.2 Dev
+ */
+async function generateWithFlux2Dev(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+  const imageSize = mapAspectRatio(aspectRatio);
+
+  const result = await fal.subscribe('fal-ai/flux-2/edit', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: imageSize,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in FLUX.2 Dev response');
+  }
+
+  return { imageUrl };
+}
+
+/**
+ * Generate image using FLUX.2 Pro
+ */
+async function generateWithFlux2Pro(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+  const imageSize = mapAspectRatio(aspectRatio);
+
+  const result = await fal.subscribe('fal-ai/flux-2-pro/edit', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: imageSize,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in FLUX.2 Pro response');
+  }
+
+  return { imageUrl };
+}
+
+/**
+ * Generate image using FLUX.2 Max
+ */
+async function generateWithFlux2Max(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+  const imageSize = mapAspectRatio(aspectRatio);
+
+  const result = await fal.subscribe('fal-ai/flux-2-max/edit', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: imageSize,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in FLUX.2 Max response');
+  }
+
+  return { imageUrl };
+}
+
+
+/**
+ * Generate image using GPT Image 1.5
+ */
+async function generateWithGptImage15(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+
+  // GPT Image uses specific size formats
+  const sizeMap: Record<string, string> = {
+    '1:1': '1024x1024',
+    '16:9': '1536x1024',
+    '9:16': '1024x1536',
+  };
+  const imageSize = sizeMap[aspectRatio] || 'auto';
+
+  const result = await fal.subscribe('fal-ai/gpt-image-1.5/edit', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: imageSize,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in GPT Image 1.5 response');
+  }
+
+  return { imageUrl };
+}
+
+/**
+ * Generate image using FLUX.2 Flex
+ */
+async function generateWithFlux2Flex(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+  const imageSize = mapAspectRatio(aspectRatio);
+
+  const result = await fal.subscribe('fal-ai/flux-2-flex/edit', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: imageSize,
+      num_inference_steps: 28,
+      guidance_scale: 3.5,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in FLUX.2 Flex response');
+  }
+
+  return { imageUrl };
+}
+
+/**
+ * Generate image using Qwen Image Edit 2509
+ */
+async function generateWithQwen2509(
+  uploadedImageUrl: string,
+  prompt: string,
+  aspectRatio: string
+): Promise<{ imageUrl: string }> {
+  const enhancedPrompt = enhancePrompt(prompt);
+  const mappedAspectRatio = mapAspectRatio(aspectRatio);
+
+  const result = await fal.subscribe('fal-ai/qwen-image-edit-2509', {
+    input: {
+      prompt: enhancedPrompt,
+      image_urls: [uploadedImageUrl],
+      image_size: mappedAspectRatio as "square" | "landscape_16_9" | "portrait_16_9" | "landscape_4_3" | "portrait_4_3" | "square_hd",
+      num_inference_steps: 30,
+      guidance_scale: 2.5,
+    },
+  });
+
+  const imageUrl = result.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('No image URL in Qwen Image Edit 2509 response');
+  }
+
+  return { imageUrl };
+}
+
+/**
  * Generate image with specified model
  */
 export async function generateWithModel(
@@ -256,14 +402,6 @@ export async function generateWithModel(
         imageUrl = fluxResult.imageUrl;
         break;
 
-      case 'qwen-edit':
-        const qwenResult = await generateWithQwen(
-          uploadedImageUrl,
-          prompt,
-          aspectRatio
-        );
-        imageUrl = qwenResult.imageUrl;
-        break;
 
       case 'seededit':
         const seedEditResult = await generateWithSeedEdit(
@@ -288,6 +426,61 @@ export async function generateWithModel(
           prompt
         );
         imageUrl = nanoBananaResult.imageUrl;
+        break;
+
+      case 'flux-2-dev':
+        const flux2DevResult = await generateWithFlux2Dev(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = flux2DevResult.imageUrl;
+        break;
+
+      case 'flux-2-pro':
+        const flux2ProResult = await generateWithFlux2Pro(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = flux2ProResult.imageUrl;
+        break;
+
+      case 'flux-2-max':
+        const flux2MaxResult = await generateWithFlux2Max(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = flux2MaxResult.imageUrl;
+        break;
+
+
+      case 'gpt-image-1.5':
+        const gptImage15Result = await generateWithGptImage15(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = gptImage15Result.imageUrl;
+        break;
+
+      case 'flux-2-flex':
+        const flux2FlexResult = await generateWithFlux2Flex(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = flux2FlexResult.imageUrl;
+        break;
+
+      case 'qwen-edit-2509':
+        const qwen2509Result = await generateWithQwen2509(
+          uploadedImageUrl,
+          prompt,
+          aspectRatio
+        );
+        imageUrl = qwen2509Result.imageUrl;
         break;
 
       default:

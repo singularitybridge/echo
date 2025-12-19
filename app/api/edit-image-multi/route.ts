@@ -47,7 +47,12 @@ export async function POST(request: NextRequest) {
     const validModels: ImageEditingModel[] = [
       'gemini-flash',
       'flux-kontext',
-      'qwen-edit',
+      'flux-2-dev',
+      'flux-2-pro',
+      'flux-2-max',
+      'flux-2-flex',
+      'gpt-image-1.5',
+      'qwen-edit-2509',
       'seededit',
       'seededit-v4',
       'nano-banana-pro',
