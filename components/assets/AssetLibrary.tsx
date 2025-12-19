@@ -113,17 +113,38 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
   // Load storyboard assets from story storage
   const loadStoryboardAssets = async (): Promise<Asset[]> => {
     try {
-      const response = await fetch(`/api/stories/${projectId}/assets?type=storyboard`);
-      if (!response.ok) return [];
+      // Fetch both assets and story script (for imagePrompt)
+      const [assetsResponse, scriptResponse] = await Promise.all([
+        fetch(`/api/stories/${projectId}/assets?type=storyboard`),
+        fetch(`/api/stories/${projectId}/script`),
+      ]);
 
-      const data = await response.json();
-      const storyboardPaths: string[] = data.assets?.storyboards || [];
+      if (!assetsResponse.ok) return [];
+
+      const assetsData = await assetsResponse.json();
+      const storyboardPaths: string[] = assetsData.assets?.storyboards || [];
+
+      // Get scenes from script for imagePrompt lookup
+      let scenes: Array<{ id: string; title?: string; imagePrompt?: string; prompt?: string }> = [];
+      if (scriptResponse.ok) {
+        const scriptData = await scriptResponse.json();
+        scenes = scriptData.scenes || [];
+      }
 
       // Convert storyboard file paths to Asset objects
       return storyboardPaths.map((path, index) => {
         const filename = path.split('/').pop() || `storyboard-${index + 1}`;
         const sceneMatch = filename.match(/storyboard-scene-(\d+)/);
         const sceneId = sceneMatch ? `scene-${sceneMatch[1]}` : undefined;
+
+        // Find matching scene for this storyboard to get imagePrompt
+        const matchingScene = sceneId
+          ? scenes.find(s => s.id === sceneId)
+          : scenes[index]; // Fallback to index-based matching
+
+        // Get the best prompt: imagePrompt > prompt > empty
+        const generationPrompt = matchingScene?.imagePrompt || matchingScene?.prompt || '';
+        const sceneName = matchingScene?.title || (sceneId ? `Scene ${sceneMatch![1]}` : `Frame ${index + 1}`);
 
         // Use filename in ID for proper deletion support
         // Format: storyboard__{projectId}__{filename} (double underscore separator)
@@ -132,12 +153,12 @@ export default function AssetLibrary({ projectId }: AssetLibraryProps) {
           projectId,
           type: 'storyboard' as any,
           category: 'storyboards',
-          name: sceneId ? `Scene ${sceneMatch![1]} Storyboard` : filename.replace('.png', ''),
-          description: sceneId ? `Storyboard frame for scene ${sceneMatch![1]}` : 'Storyboard frame',
+          name: `${sceneName} - Storyboard`,
+          description: generationPrompt, // Use imagePrompt as description
           url: `/api/stories/${projectId}/assets/storyboards/${filename}`,
           thumbnailUrl: `/api/stories/${projectId}/assets/storyboards/${filename}`,
           aspectRatio: '16:9',
-          generationPrompt: '',
+          generationPrompt,
           provider: 'fal' as any,
           tags: ['storyboard'],
           editHistory: [],

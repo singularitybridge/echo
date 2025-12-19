@@ -13,6 +13,7 @@ export interface GenerationSettings {
   aspectRatio: AspectRatio;
   resolution: Resolution;
   isLooping: boolean;
+  camera_movement?: 'static/fixed' | 'dynamic' | string; // Camera movement preference
 }
 
 export interface SceneAssetAttachment {
@@ -26,8 +27,9 @@ export interface Scene {
   id: string;
   title: string;
   duration: number;
-  prompt: string;
+  prompt: string; // Visual description for video generation
   cameraAngle: string;
+  direction?: string; // Acting/scene direction guidelines (shown in UI)
 
   // Speech/Dialogue
   voiceover?: string; // The spoken text (dialogue or narration)

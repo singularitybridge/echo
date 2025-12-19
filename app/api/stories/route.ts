@@ -95,9 +95,11 @@ export async function POST(request: NextRequest) {
       description: body.description,
       type: body.type,
       character: body.character,
+      personaId: body.personaId, // Director persona for style
       script: body.script,
       config: body.config,
       tags: body.tags,
+      generationMetadata: body.generationMetadata, // Include AI generation metadata
     });
 
     return NextResponse.json({

@@ -23,6 +23,7 @@ import type { Asset } from '../types/asset';
 import { AspectRatio } from '@/types';
 import { generateImage } from '../services/imageService';
 import { executeStoryboardDesignerAgent } from '../services/agentHubService';
+import { DIRECTOR_PERSONAS, DirectorPersona } from '@/types/director-personas';
 
 interface AssetGenerationFlowModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ interface AssetGenerationFlowModalProps {
 interface StoryboardFrame {
   sceneId: string;
   sceneTitle: string;
-  frameDescription: string;
+  frameDescription?: string; // Deprecated - use imagePrompt instead
   imagePrompt: string;
   cameraAngle: string;
   mood: string;
@@ -292,7 +293,7 @@ Create one storyboard frame for each scene. Each frame should capture the entire
             type: 'scene',
             category: 'storyboard',
             name: `${frame.sceneTitle} - Storyboard Frame`,
-            description: frame.frameDescription,
+            description: frame.imagePrompt, // Use imagePrompt as description
             provider: 'fal',
             generationPrompt: frame.imagePrompt,
             projectId: '',
@@ -384,6 +385,22 @@ Create one storyboard frame for each scene. Each frame should capture the entire
                 Generate visual frames for each scene
               </p>
             </div>
+            {/* Director Badge */}
+            {storyDraft.projectMetadata.personaId && DIRECTOR_PERSONAS[storyDraft.projectMetadata.personaId as DirectorPersona] && (
+              <div className="flex items-center gap-2 bg-white rounded-md px-2 py-1 border border-gray-200 ml-4">
+                <img
+                  src={DIRECTOR_PERSONAS[storyDraft.projectMetadata.personaId as DirectorPersona].avatar}
+                  alt={DIRECTOR_PERSONAS[storyDraft.projectMetadata.personaId as DirectorPersona].directorName}
+                  className="w-6 h-6 rounded-full object-cover"
+                />
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-500 leading-tight">Directed by</span>
+                  <span className="text-xs font-medium text-gray-900 leading-tight">
+                    {DIRECTOR_PERSONAS[storyDraft.projectMetadata.personaId as DirectorPersona].directorName}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {generating && onMinimize && (
@@ -593,14 +610,6 @@ Create one storyboard frame for each scene. Each frame should capture the entire
                         </button>
                       </div>
                       <p className="text-sm text-gray-700 leading-relaxed">{frame.imagePrompt}</p>
-
-                      {/* Frame Description */}
-                      {frame.frameDescription && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <span className="text-xs font-medium text-gray-500">Description</span>
-                          <p className="text-sm text-gray-600 mt-1">{frame.frameDescription}</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

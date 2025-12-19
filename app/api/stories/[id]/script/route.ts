@@ -6,6 +6,38 @@ import { NextRequest, NextResponse } from 'next/server';
 import { storyStorage } from '../../../../../services/storyStorage';
 
 /**
+ * GET /api/stories/[id]/script - Get story script (scenes)
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const story = await storyStorage.getStory(id);
+
+    if (!story) {
+      return NextResponse.json(
+        { error: 'Story not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      scenes: story.script.scenes,
+      deletedStoryStorageAssets: story.script.deletedStoryStorageAssets || [],
+    });
+  } catch (error) {
+    const { id } = await params;
+    console.error(`Error getting script for story ${id}:`, error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to get script' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * PUT /api/stories/[id]/script - Update story script
  *
  * This is the primary endpoint for AI agents to edit scripts.

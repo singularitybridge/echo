@@ -37,11 +37,12 @@ interface StoryboardModalProps {
 export interface StoryboardFrame {
   sceneId: string;
   sceneTitle: string;
-  frameDescription: string;
+  frameDescription?: string; // Deprecated - use imagePrompt instead
   imagePrompt: string;
   cameraAngle: string;
-  mood: string;
-  keyElements: string[];
+  direction?: string; // Acting/performance direction for the scene
+  mood?: string; // Deprecated - no longer generated
+  keyElements?: string[]; // Deprecated - no longer generated
   speechType: 'voiceover' | 'narration'; // 'voiceover' = character speaking on-screen, 'narration' = off-screen narrator
   voiceoverText?: string; // The spoken text for this scene
   imageUrl?: string;
@@ -211,7 +212,7 @@ Requirements:
 - Include the voiceoverText from the original scene
 
 Return ONLY valid JSON with storyboardFrames array. Each frame must include:
-- sceneId, sceneTitle, frameDescription, imagePrompt, cameraAngle, mood, keyElements
+- sceneId, sceneTitle, imagePrompt, cameraAngle, direction
 - speechType: "voiceover" or "narration" based on the visual content
 - voiceoverText: the spoken text from the original scene`,
           responseFormat: { type: 'json_object' },
@@ -393,7 +394,7 @@ Return ONLY valid JSON with storyboardFrames array. Each frame must include:
 Scene ${index + 1}: ${frame.sceneTitle}
 - Current prompt: ${frame.imagePrompt}
 - Camera: ${frame.cameraAngle}
-- Mood: ${frame.mood}
+- Direction: ${frame.direction || 'Not specified'}
 `).join('\n');
 
       // Call Agent Hub storyboard designer agent
@@ -412,7 +413,7 @@ Story context:
 - Director Style: ${directorInfo?.name || 'Cinematic'}
 - Aspect Ratio: ${story.projectMetadata.aspectRatio || '9:16'}
 
-Update the storyboard frames based on the user's request. You can modify prompts, moods, or other visual elements.
+Update the storyboard frames based on the user's request. You can modify prompts, direction, or other visual elements.
 
 Return ONLY valid JSON with storyboardFrames array (include ALL scenes, even unchanged ones).`,
           responseFormat: { type: 'json_object' },
@@ -743,9 +744,25 @@ Return ONLY valid JSON with storyboardFrames array (include ALL scenes, even unc
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Storyboard</h2>
               <p className="text-sm text-gray-500">
-                {story.scenes.length} scenes • {directorInfo?.name || 'Custom'} style
+                {story.scenes.length} scenes
               </p>
             </div>
+            {/* Director Badge */}
+            {directorInfo && (
+              <div className="flex items-center gap-2 bg-white rounded-md px-2 py-1 border border-gray-200 ml-4">
+                <img
+                  src={directorInfo.avatar}
+                  alt={directorInfo.directorName}
+                  className="w-6 h-6 rounded-full object-cover"
+                />
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-500 leading-tight">Directed by</span>
+                  <span className="text-xs font-medium text-gray-900 leading-tight">
+                    {directorInfo.directorName}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -947,18 +964,16 @@ Return ONLY valid JSON with storyboardFrames array (include ALL scenes, even unc
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-400">Camera:</span>
-                          <span className="text-gray-600">{frame.cameraAngle}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-400">Mood:</span>
-                          <span className="text-gray-600">{frame.mood}</span>
-                        </div>
                         {frame.voiceoverText && (
                           <div className="mt-1 pt-1 border-t border-gray-100">
                             <span className="text-gray-400">Speech:</span>
                             <p className="text-gray-600 italic line-clamp-2 mt-0.5">"{frame.voiceoverText}"</p>
+                          </div>
+                        )}
+                        {frame.direction && (
+                          <div className="mt-1 pt-1 border-t border-gray-100">
+                            <span className="text-gray-400">Direction:</span>
+                            <p className="text-gray-600 text-xs line-clamp-2 mt-0.5">{frame.direction}</p>
                           </div>
                         )}
                       </div>
@@ -1013,7 +1028,6 @@ Return ONLY valid JSON with storyboardFrames array (include ALL scenes, even unc
                     )}
                   </span>
                 </div>
-                <p className="text-xs text-gray-600 mb-2">{selectedFrameData.frameDescription}</p>
                 {selectedFrameData.voiceoverText && (
                   <div className="mb-2 p-2 bg-white/50 rounded border border-indigo-100">
                     <p className="text-xs text-gray-500 font-medium mb-1">Speech Text:</p>
@@ -1042,13 +1056,12 @@ Return ONLY valid JSON with storyboardFrames array (include ALL scenes, even unc
                     )}
                   </div>
                 )}
-                <div className="flex flex-wrap gap-1">
-                  {selectedFrameData.keyElements.map((element, i) => (
-                    <span key={i} className="px-2 py-0.5 bg-white text-gray-600 rounded text-xs">
-                      {element}
-                    </span>
-                  ))}
-                </div>
+                {selectedFrameData.direction && (
+                  <div className="p-2 bg-white/50 rounded border border-indigo-100">
+                    <p className="text-xs text-gray-500 font-medium mb-1">Direction:</p>
+                    <p className="text-xs text-gray-700">{selectedFrameData.direction}</p>
+                  </div>
+                )}
               </div>
             )}
 

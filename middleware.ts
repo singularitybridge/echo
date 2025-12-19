@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/story/generate') || // Story generation API (for testing)
     pathname.startsWith('/api/assets/analyze') || // Asset analysis via AI (internal)
     pathname.startsWith('/api/edit-image-stream') || // Image editing stream API (internal)
+    pathname.startsWith('/api/docs') || // Documentation API (public)
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico')
   ) {

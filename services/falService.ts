@@ -94,6 +94,11 @@ export const generateVideoWithFal = async (
   let endpoint: string;
   let input: any;
 
+  // Build negative prompt for static camera if requested
+  const negativePrompt = params.cameraMovement === 'static/fixed'
+    ? 'camera movement, camera motion, camera pan, camera tilt, camera zoom, dolly, tracking shot, crane shot, shaky cam, handheld'
+    : undefined;
+
   if (params.mode === GenerationMode.FRAMES_TO_VIDEO) {
     // Use image-to-video endpoint for single frame (supports aspect_ratio)
     endpoint = "fal-ai/veo3.1/image-to-video";
@@ -104,6 +109,7 @@ export const generateVideoWithFal = async (
       duration,
       resolution: (params.resolution === '1080p' ? '1080p' : '720p') as '720p' | '1080p',
       generate_audio: true,
+      ...(negativePrompt && { negative_prompt: negativePrompt }),
     };
   } else {
     // Use reference-to-video endpoint for multiple references (no aspect_ratio support)
@@ -114,6 +120,7 @@ export const generateVideoWithFal = async (
       duration,
       resolution: (params.resolution === '1080p' ? '1080p' : '720p') as '720p' | '1080p',
       generate_audio: true,
+      ...(negativePrompt && { negative_prompt: negativePrompt }),
     };
   }
 
@@ -124,6 +131,10 @@ export const generateVideoWithFal = async (
   console.log('Resolution:', input.resolution);
   console.log('Aspect Ratio:', params.aspectRatio);
   console.log('Reference images:', imageUrls.length);
+  console.log('Camera Movement:', params.cameraMovement || 'dynamic');
+  if (negativePrompt) {
+    console.log('Negative Prompt:', negativePrompt);
+  }
 
   let result;
   try {

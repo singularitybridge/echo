@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Film, Video as VideoIcon, Package, Plus, User, Bot, LogOut } from 'lucide-react';
+import { Film, Video as VideoIcon, Package, Plus, User, Bot, LogOut, BookOpen } from 'lucide-react';
 import { Project } from '../types/project';
 import { StoryDraft } from '../types/story-creation';
 import { Asset } from '../types/asset';
@@ -51,6 +51,7 @@ const ProjectList: React.FC = () => {
           description: story.description,
           type: story.type,
           character: story.character,
+          personaId: story.personaId,
           aspectRatio: story.aspectRatio,
           defaultModel: story.defaultModel,
           defaultResolution: story.defaultResolution,
@@ -214,16 +215,28 @@ const ProjectList: React.FC = () => {
       console.log('Creating story with generated assets...');
 
       // Prepare scenes with storyboard frame references
-      // The storyboard modal already set attachedAssets on each scene
+      // Each scene gets its own storyboard asset as reference (indexed by scene position)
+      // Storyboards are loaded into combinedRefs in scene order, so scene 1 uses ref 1, scene 2 uses ref 2, etc.
+      let storyboardRefIndex = 0;
       const scenesWithAssets = currentStoryDraft.scenes.map((scene, index) => {
         // Find matching storyboard asset for this scene
         const storyboardAsset = assets.find(a => a.usedInScenes?.includes(scene.id));
 
+        // If this scene has a storyboard, assign incrementing reference index
+        let referenceMode: 'previous' | number;
+        if (storyboardAsset) {
+          storyboardRefIndex++;
+          referenceMode = storyboardRefIndex; // 1-based index matching asset order
+        } else {
+          referenceMode = index === 0 ? 1 : 'previous';
+        }
+
         return {
           ...scene,
-          // Set referenceMode to use the first attached asset (storyboard frame)
-          referenceMode: storyboardAsset ? 1 : (index === 0 ? 1 : 'previous'),
+          referenceMode,
           attachedAssets: scene.attachedAssets || [],
+          // Preserve the imagePrompt from the storyboard asset if scene doesn't have one
+          imagePrompt: scene.imagePrompt || storyboardAsset?.generationPrompt,
         };
       });
 
@@ -232,6 +245,7 @@ const ProjectList: React.FC = () => {
         description: currentStoryDraft.projectMetadata.description,
         type: currentStoryDraft.projectMetadata.type,
         character: currentStoryDraft.projectMetadata.character,
+        personaId: currentStoryDraft.projectMetadata.personaId, // Director persona for style
         script: {
           scenes: scenesWithAssets,
         },
@@ -252,7 +266,23 @@ const ProjectList: React.FC = () => {
       });
 
       if (!storyResponse.ok) {
-        throw new Error('Failed to create story');
+        const errorData = await storyResponse.json().catch(() => ({}));
+        const errorMsg = errorData.error || 'Failed to create story';
+
+        // If story already exists, redirect to it
+        if (errorMsg.includes('already exists')) {
+          // Extract story ID from error message: 'Story with ID "story-id-2025" already exists'
+          const match = errorMsg.match(/"([^"]+)"/);
+          const existingStoryId = match ? match[1] : storyRequest.title
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-') + '-' + new Date().getFullYear();
+          console.log('Story already exists, redirecting to:', existingStoryId);
+          router.push(`/projects/${existingStoryId}`);
+          return;
+        }
+
+        throw new Error(errorMsg);
       }
 
       const storyResult = await storyResponse.json();
@@ -394,20 +424,26 @@ const ProjectList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-6 py-2">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col items-start gap-3">
-              <img
-                src="/logo.png"
-                alt="Echo"
-                className="h-8 w-auto object-contain"
-              />
-              <p className="text-sm text-gray-600">Your story, elevated</p>
+            <div className="flex flex-col items-start">
+              <h1 className="text-4xl font-[var(--font-logo)] font-light tracking-wide text-slate-600">echo:</h1>
+              <p className="text-sm text-gray-400">
+                ai video studio by <span className="bg-gradient-to-r from-gray-500 to-gray-300 bg-clip-text text-transparent">95% ai</span>
+              </p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push('/docs')}
+                className="p-2.5 text-gray-600 hover:text-gray-900 transition-all hover:scale-105 cursor-pointer"
+                title="Documentation"
+                aria-label="Documentation"
+              >
+                <BookOpen className="w-5 h-5" />
+              </button>
               <button
                 onClick={() => router.push('/agents')}
                 className="p-2.5 text-gray-600 hover:text-gray-900 transition-all hover:scale-105 cursor-pointer"

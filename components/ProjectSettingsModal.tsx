@@ -18,6 +18,7 @@ interface ProjectSettingsModalProps {
     mode: 'quick' | 'custom';
     timestamp: string;
     originalParams: Record<string, any>;
+    inputPrompt?: string; // The user's original creative direction
   };
   onSave: (settings: {
     title: string;
@@ -147,72 +148,104 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="border-t border-indigo-200 pt-3">
-                  <div className="text-sm font-semibold text-indigo-900 mb-3">Generation Parameters</div>
-                  <div className="space-y-2.5">
-                    {generationMetadata.mode === 'quick' ? (
-                      <>
-                        {generationMetadata.originalParams.genre && (
-                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
-                            <span className="text-xs font-medium text-gray-600">Genre</span>
-                            <span className="text-sm font-semibold text-gray-900 capitalize">
-                              {generationMetadata.originalParams.genre}
-                            </span>
-                          </div>
-                        )}
-                        {generationMetadata.originalParams.type && (
-                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
-                            <span className="text-xs font-medium text-gray-600">Story Type</span>
-                            <span className="text-sm font-semibold text-gray-900 capitalize">
-                              {generationMetadata.originalParams.type.replace('-', ' ')}
-                            </span>
-                          </div>
-                        )}
-                        {generationMetadata.originalParams.energy && (
-                          <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
-                            <span className="text-xs font-medium text-gray-600">Energy/Pacing</span>
-                            <span className="text-sm font-semibold text-gray-900 capitalize">
-                              {generationMetadata.originalParams.energy}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {generationMetadata.originalParams.concept && (
-                          <div className="bg-white rounded-lg px-3 py-2">
-                            <div className="text-xs font-medium text-gray-600 mb-1">Concept / What Happens</div>
-                            <div className="text-sm text-gray-900 leading-relaxed">
-                              {generationMetadata.originalParams.concept}
-                            </div>
-                          </div>
-                        )}
-                        {generationMetadata.originalParams.character && (
-                          <div className="bg-white rounded-lg px-3 py-2">
-                            <div className="text-xs font-medium text-gray-600 mb-1">Character / Who's Involved</div>
-                            <div className="text-sm text-gray-900 leading-relaxed">
-                              {generationMetadata.originalParams.character}
-                            </div>
-                          </div>
-                        )}
-                        {generationMetadata.originalParams.mood && (
-                          <div className="bg-white rounded-lg px-3 py-2">
-                            <div className="text-xs font-medium text-gray-600 mb-1">Mood & Tone</div>
-                            <div className="text-sm text-gray-900 leading-relaxed">
-                              {generationMetadata.originalParams.mood}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
+                {/* User's Original Creative Direction */}
+                {generationMetadata.inputPrompt && (
+                  <div className="border-t border-indigo-200 pt-3">
+                    <div className="text-sm font-semibold text-indigo-900 mb-2">Original Story Prompt</div>
+                    <div className="bg-white rounded-lg px-3 py-3 border border-indigo-100">
+                      <p className="text-sm text-gray-800 leading-relaxed italic">
+                        "{generationMetadata.inputPrompt}"
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="border-t border-indigo-200 pt-3">
-                  <div className="text-xs text-indigo-700 italic">
-                    These parameters were used to generate the initial story and can guide future script edits.
-                  </div>
-                </div>
+                {/* Only show Generation Parameters if there are params to display */}
+                {(() => {
+                  const hasQuickParams = generationMetadata.mode === 'quick' && (
+                    generationMetadata.originalParams.genre ||
+                    generationMetadata.originalParams.type ||
+                    generationMetadata.originalParams.energy
+                  );
+                  const hasCustomParams = generationMetadata.mode === 'custom' && (
+                    generationMetadata.originalParams.concept ||
+                    generationMetadata.originalParams.character ||
+                    generationMetadata.originalParams.mood
+                  );
+
+                  if (!hasQuickParams && !hasCustomParams) return null;
+
+                  return (
+                    <>
+                      <div className="border-t border-indigo-200 pt-3">
+                        <div className="text-sm font-semibold text-indigo-900 mb-3">Generation Parameters</div>
+                        <div className="space-y-2.5">
+                          {generationMetadata.mode === 'quick' ? (
+                            <>
+                              {generationMetadata.originalParams.genre && (
+                                <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                                  <span className="text-xs font-medium text-gray-600">Genre</span>
+                                  <span className="text-sm font-semibold text-gray-900 capitalize">
+                                    {generationMetadata.originalParams.genre}
+                                  </span>
+                                </div>
+                              )}
+                              {generationMetadata.originalParams.type && (
+                                <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                                  <span className="text-xs font-medium text-gray-600">Story Type</span>
+                                  <span className="text-sm font-semibold text-gray-900 capitalize">
+                                    {generationMetadata.originalParams.type.replace('-', ' ')}
+                                  </span>
+                                </div>
+                              )}
+                              {generationMetadata.originalParams.energy && (
+                                <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                                  <span className="text-xs font-medium text-gray-600">Energy/Pacing</span>
+                                  <span className="text-sm font-semibold text-gray-900 capitalize">
+                                    {generationMetadata.originalParams.energy}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {generationMetadata.originalParams.concept && (
+                                <div className="bg-white rounded-lg px-3 py-2">
+                                  <div className="text-xs font-medium text-gray-600 mb-1">Concept / What Happens</div>
+                                  <div className="text-sm text-gray-900 leading-relaxed">
+                                    {generationMetadata.originalParams.concept}
+                                  </div>
+                                </div>
+                              )}
+                              {generationMetadata.originalParams.character && (
+                                <div className="bg-white rounded-lg px-3 py-2">
+                                  <div className="text-xs font-medium text-gray-600 mb-1">Character / Who's Involved</div>
+                                  <div className="text-sm text-gray-900 leading-relaxed">
+                                    {generationMetadata.originalParams.character}
+                                  </div>
+                                </div>
+                              )}
+                              {generationMetadata.originalParams.mood && (
+                                <div className="bg-white rounded-lg px-3 py-2">
+                                  <div className="text-xs font-medium text-gray-600 mb-1">Mood & Tone</div>
+                                  <div className="text-sm text-gray-900 leading-relaxed">
+                                    {generationMetadata.originalParams.mood}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-indigo-200 pt-3">
+                        <div className="text-xs text-indigo-700 italic">
+                          These parameters were used to generate the initial story and can guide future script edits.
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -222,46 +255,6 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Video Settings</h3>
 
             <div className="space-y-4">
-              {/* Aspect Ratio */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aspect Ratio
-                  <span className="text-xs text-gray-500 ml-2">(applies to all scenes)</span>
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[AspectRatio.PORTRAIT, AspectRatio.LANDSCAPE, AspectRatio.SQUARE].map((ratio) => (
-                    <button
-                      key={ratio}
-                      onClick={() => setSelectedAspectRatio(ratio)}
-                      className={`p-3 border-2 rounded-lg transition-all ${
-                        selectedAspectRatio === ratio
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className={`border-2 rounded ${
-                            ratio === AspectRatio.PORTRAIT
-                              ? 'w-6 h-10'
-                              : ratio === AspectRatio.LANDSCAPE
-                              ? 'w-10 h-6'
-                              : 'w-8 h-8'
-                          } ${
-                            selectedAspectRatio === ratio
-                              ? 'border-indigo-600 bg-indigo-100'
-                              : 'border-gray-400'
-                          }`}
-                        />
-                        <span className="text-xs font-medium text-gray-700">
-                          {getAspectRatioLabel(ratio)}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Default Model */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -27,6 +27,7 @@ export interface StoryMetadata {
   description: string;
   type: 'short' | 'commercial' | 'long';
   character?: string;
+  personaId?: string; // Director persona for style
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -37,6 +38,7 @@ export interface StoryMetadata {
     mode: 'quick' | 'custom';
     timestamp: string;
     originalParams: Record<string, any>; // QuickPathParams | CustomPathParams
+    inputPrompt?: string; // The user's original creative direction/request
   };
 }
 
@@ -77,6 +79,7 @@ export interface CreateStoryRequest {
   description: string;
   type: 'short' | 'commercial' | 'long';
   character?: string;
+  personaId?: string; // Director persona for style
   script: StoryScript;
   config: StoryConfig;
   tags?: string[];
@@ -84,6 +87,7 @@ export interface CreateStoryRequest {
     mode: 'quick' | 'custom';
     timestamp: string;
     originalParams: Record<string, any>;
+    inputPrompt?: string; // The user's original creative direction/request
   };
 }
 
@@ -99,6 +103,11 @@ export interface StoryListItem {
   description: string;
   type: 'short' | 'commercial' | 'long';
   status: 'draft' | 'in-progress' | 'completed' | 'published';
+  character?: string;
+  personaId?: string;
+  aspectRatio?: string;
+  defaultModel?: string;
+  defaultResolution?: string;
   sceneCount: number;
   createdAt: string;
   updatedAt: string;
@@ -215,6 +224,7 @@ class StoryStorage {
       description: data.description,
       type: data.type,
       character: data.character,
+      personaId: data.personaId,
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -305,6 +315,7 @@ class StoryStorage {
       const storyPath = this.getStoryPath(storyId);
       const metadataPath = join(storyPath, 'metadata.json');
       const scriptPath = join(storyPath, 'script.json');
+      const configPath = join(storyPath, 'config.json');
 
       if (!existsSync(metadataPath) || !existsSync(scriptPath)) {
         continue;
@@ -315,6 +326,13 @@ class StoryStorage {
         const scriptJson = await readFile(scriptPath, 'utf-8');
         const metadata: StoryMetadata = JSON.parse(metadataJson);
         const script: StoryScript = JSON.parse(scriptJson);
+
+        // Read config for generation settings
+        let config: any = {};
+        if (existsSync(configPath)) {
+          const configJson = await readFile(configPath, 'utf-8');
+          config = JSON.parse(configJson);
+        }
 
         // Apply filters
         if (filters?.status && metadata.status !== filters.status) continue;
@@ -327,6 +345,11 @@ class StoryStorage {
           description: metadata.description,
           type: metadata.type,
           status: metadata.status,
+          character: metadata.character,
+          personaId: metadata.personaId,
+          aspectRatio: config.aspectRatio,
+          defaultModel: config.defaultModel,
+          defaultResolution: config.defaultResolution,
           sceneCount: script.scenes.length,
           createdAt: metadata.createdAt,
           updatedAt: metadata.updatedAt,
@@ -540,7 +563,20 @@ class StoryStorage {
     for (const type of types) {
       const typePath = join(assetsPath, type);
       if (existsSync(typePath)) {
-        const files = await readdir(typePath);
+        let files = await readdir(typePath);
+
+        // Sort storyboard files by scene number to ensure consistent ordering
+        // Filename format: storyboard-scene-{N}.png
+        if (type === 'storyboards') {
+          files = files.sort((a, b) => {
+            const matchA = a.match(/scene-(\d+)/);
+            const matchB = b.match(/scene-(\d+)/);
+            const numA = matchA ? parseInt(matchA[1], 10) : 0;
+            const numB = matchB ? parseInt(matchB[1], 10) : 0;
+            return numA - numB;
+          });
+        }
+
         assets[type] = files.map(file => `assets/${type}/${file}`);
       }
     }

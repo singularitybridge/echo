@@ -14,6 +14,8 @@ export interface GeneratedImage {
   objectUrl: string;
   blob: Blob;
   assetId?: string; // Asset ID for assets loaded from database
+  name?: string;
+  description?: string;
 }
 
 // Global lock to prevent duplicate generations

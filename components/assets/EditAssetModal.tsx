@@ -90,21 +90,25 @@ export default function EditAssetModal({
           setVersionHistory([storyboardAsset]);
           setCurrentVersionIndex(0);
 
-          // Initialize with creation message and show last edit prompt if available
-          const initialMessages: ChatMessage[] = [
-            {
-              role: 'assistant',
-              content: `Storyboard frame loaded: ${asset.name}`,
-              timestamp: Date.now() - 1,
-            },
-          ];
+          // Initialize with the generation prompt as the first message
+          const initialMessages: ChatMessage[] = [];
 
-          // Show the prompt that was used to create/edit this asset
-          if (asset.generationPrompt) {
+          // Show the prompt that was used to generate this storyboard frame
+          // Priority: generationPrompt > description
+          const promptToShow = asset.generationPrompt || asset.description || '';
+
+          if (promptToShow && promptToShow !== 'Storyboard frame') {
             initialMessages.push({
               role: 'assistant',
-              content: `Last edit prompt: "${asset.generationPrompt}"`,
-              timestamp: Date.now(),
+              content: `Created with storyboard prompt:\n\n"${promptToShow}"`,
+              timestamp: Date.now() - 1,
+            });
+          } else {
+            // Fallback if no prompt available
+            initialMessages.push({
+              role: 'assistant',
+              content: `Storyboard frame for: ${asset.name}`,
+              timestamp: Date.now() - 1,
             });
           }
 

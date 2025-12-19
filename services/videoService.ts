@@ -25,6 +25,7 @@ export interface VideoGenerationSettings {
   aspectRatio?: AspectRatio;
   resolution?: Resolution;
   isLooping?: boolean;
+  camera_movement?: 'static/fixed' | 'dynamic' | string;
 }
 
 /**
@@ -191,6 +192,7 @@ export const generateVideo = async (
     inputVideo: null,
     inputVideoObject: null,
     isLooping: settings?.isLooping || false,
+    cameraMovement: settings?.camera_movement,
   };
 
   // Use Fal.ai for video generation (replaced Gemini due to quota limits)

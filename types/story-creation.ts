@@ -46,8 +46,9 @@ export interface GeneratedScene {
   id: string;
   title: string;
   duration: number; // seconds (default: 8)
-  prompt: string; // Visual description for Veo
+  prompt: string; // Visual description for Veo video generation
   cameraAngle: string;
+  direction?: string; // Acting/scene direction guidelines (shown in UI)
   voiceover: string; // The spoken text (dialogue or narration)
   speechType?: SpeechType; // 'voiceover' = character speaking on-screen, 'narration' = off-screen narrator
   generated: boolean;
@@ -70,6 +71,7 @@ export interface GenerationMetadata {
   timestamp: string; // ISO string
   aiPrompt: string; // The prompt sent to Gemini
   originalParams: QuickPathParams | CustomPathParams;
+  inputPrompt?: string; // The user's original creative direction/request (e.g., "What story should Vincent Cortez tell?")
   refinements?: {
     timestamp: string;
     feedback: string;

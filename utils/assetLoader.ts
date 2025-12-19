@@ -14,6 +14,8 @@ export interface AssetReference {
   objectUrl: string;
   id: string;
   aspectRatio?: string;
+  name?: string;
+  description?: string;
 }
 
 /**
@@ -128,6 +130,8 @@ export class AssetLoader {
         objectUrl: asset.url,
         id: asset.id,
         aspectRatio: asset.aspectRatio,
+        name: asset.name,
+        description: asset.description,
       }));
   }
 

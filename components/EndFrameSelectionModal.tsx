@@ -5,10 +5,17 @@
 import React from 'react';
 import { X, Image as ImageIcon, Film, Ban } from 'lucide-react';
 
+interface AssetInfo {
+  url: string;
+  name?: string;
+  description?: string;
+}
+
 interface EndFrameSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   characterRefs: string[];  // Same format as ReferenceSelectionModal - array of URLs
+  assetInfo?: AssetInfo[];  // Optional: asset name and description for display
   selectedEndFrame: 'none' | 'asset' | 'next-shot';
   selectedAssetIndex?: number;  // 1-based index like referenceMode
   onSelectEndFrame: (mode: 'none' | 'asset' | 'next-shot', assetIndex?: number) => void;
@@ -21,6 +28,7 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
   isOpen,
   onClose,
   characterRefs,
+  assetInfo,
   selectedEndFrame,
   selectedAssetIndex,
   onSelectEndFrame,
@@ -125,6 +133,10 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
             {characterRefs.map((refUrl, index) => {
               const assetIndex = index + 1;  // 1-based index like referenceMode
               const isSelected = selectedEndFrame === 'asset' && selectedAssetIndex === assetIndex;
+              const info = assetInfo?.[index];
+              const displayName = info?.name || `Asset ${assetIndex}`;
+              const displayDescription = info?.description;
+
               return (
                 <button
                   key={index}
@@ -137,13 +149,18 @@ export const EndFrameSelectionModal: React.FC<EndFrameSelectionModalProps> = ({
                 >
                   <img
                     src={refUrl}
-                    alt={`Asset ${assetIndex}`}
+                    alt={displayName}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-                    <span className="text-white text-sm font-medium">
-                      Asset {assetIndex}
-                    </span>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 pt-8 text-left">
+                    <h3 className="font-semibold text-white text-sm mb-0.5 truncate" title={displayName}>
+                      {displayName}
+                    </h3>
+                    {displayDescription && (
+                      <p className="text-xs text-white/80 line-clamp-2" title={displayDescription}>
+                        {displayDescription}
+                      </p>
+                    )}
                   </div>
                   {isSelected && (
                     <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1">

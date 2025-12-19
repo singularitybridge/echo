@@ -4,7 +4,15 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp, Ban } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp, Ban, Home } from 'lucide-react';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 import { generateVideo, GeneratedVideo } from '../services/videoService';
 import { GeneratedImage, generateImage } from '../services/imageService';
 import { VeoModel, AspectRatio, Resolution } from '../types';
@@ -32,6 +40,7 @@ import type { Asset } from '@/types/asset';
 import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-models';
 import VideoResultSelectionModal from './VideoResultSelectionModal';
 import { getAllVideoGenerationModels } from '@/lib/ai-models';
+import { DIRECTOR_PERSONAS, DirectorPersona } from '@/types/director-personas';
 
 /**
  * Helper function to load attached assets from a scene
@@ -441,6 +450,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             description: story.metadata.description,
             type: story.metadata.type,
             character: story.metadata.character,
+            personaId: story.metadata.personaId,
             aspectRatio: story.config.aspectRatio,
             defaultModel: story.config.defaultModel,
             defaultResolution: story.config.defaultResolution,
@@ -481,6 +491,71 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
 
     loadProject();
   }, [projectId]);
+
+  // Auto-fix referenceMode values for scenes with storyboard assets
+  // This fixes existing projects where scenes have incorrect referenceMode values
+  useEffect(() => {
+    if (!project) return;
+
+    const fixReferenceModes = async () => {
+      // Load storyboard assets to check if we need to fix referenceMode
+      const storyboardRefs = await AssetLoader.loadStoryboardAssets(project.id);
+      if (storyboardRefs.length === 0) return;
+
+      // Check if scenes have attached storyboard assets
+      const scenesWithStoryboards = project.scenes.filter(scene =>
+        scene.attachedAssets?.some(a => a.role === 'storyboard-frame')
+      );
+
+      if (scenesWithStoryboards.length === 0) return;
+
+      // Also load project assets to calculate correct referenceMode indices
+      const allProjectAssets = await AssetLoader.loadProjectAssets(project.id);
+      const assetRefs = AssetLoader.assetsToAssetReferences(allProjectAssets);
+
+      // Combined refs order: project assets first, then storyboard assets
+      const allRefs = [...assetRefs, ...storyboardRefs];
+
+      // Check if ANY scene has incorrect referenceMode
+      const scenesNeedingFix = scenesWithStoryboards.filter(scene => {
+        const storyboardAsset = scene.attachedAssets?.find(a => a.role === 'storyboard-frame');
+        if (!storyboardAsset) return false;
+
+        const expectedIndex = allRefs.findIndex(ref => ref.id === storyboardAsset.assetId);
+        const expectedRefMode = expectedIndex >= 0 ? expectedIndex + 1 : scene.referenceMode;
+
+        return scene.referenceMode !== expectedRefMode;
+      });
+
+      if (scenesNeedingFix.length === 0) return;
+
+      console.log(`Auto-fixing referenceMode values for ${scenesNeedingFix.length} scenes with storyboard assets...`);
+
+      // Update project with corrected referenceMode values
+      setProject(prev => {
+        if (!prev) return prev;
+
+        const updatedScenes = prev.scenes.map(scene => {
+          const storyboardAsset = scene.attachedAssets?.find(a => a.role === 'storyboard-frame');
+          if (!storyboardAsset) return scene;
+
+          // Find the index of this storyboard in the combined refs
+          const refIndex = allRefs.findIndex(ref => ref.id === storyboardAsset.assetId);
+          if (refIndex < 0) return scene;
+
+          const correctRefMode = refIndex + 1; // 1-based index
+          if (scene.referenceMode === correctRefMode) return scene;
+
+          console.log(`  Scene "${scene.title}": referenceMode ${scene.referenceMode} -> ${correctRefMode}`);
+          return { ...scene, referenceMode: correctRefMode };
+        });
+
+        return { ...prev, scenes: updatedScenes };
+      });
+    };
+
+    fixReferenceModes();
+  }, [project?.id]); // Only run when project ID changes (not on every project update)
 
   // Auto-load character reference images (per-project and aspect ratio)
   useEffect(() => {
@@ -625,6 +700,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
               objectUrl,
               blob,
               assetId: assetImg.id, // Preserve asset ID for thumbnail matching
+              name: assetImg.name,
+              description: assetImg.description,
             });
           }
         } catch (err) {
@@ -930,9 +1007,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       // Reference image mode: 3-part structure
       const parts: string[] = [];
 
-      // Part 1: Camera (cinematographer instructions)
-      if (scene.cameraAngle) {
-        parts.push(scene.cameraAngle);
+      // Part 1: Camera (cinematographer instructions) with movement override
+      let cameraInstruction = scene.cameraAngle || '';
+      if (scene.settings?.camera_movement === 'static/fixed') {
+        // Use strongest static camera language per Veo docs: "tripod lock-off (no pan/tilt/roll)"
+        cameraInstruction += cameraInstruction
+          ? ', tripod lock-off, camera is completely static on a tripod, no pan, no tilt, no zoom, no camera motion'
+          : 'Tripod lock-off, camera is completely static on a tripod, no pan, no tilt, no zoom, no camera motion';
+      }
+      if (cameraInstruction) {
+        parts.push(cameraInstruction);
       }
 
       // Part 2 & 3: Parse voiceover to separate direction from speech
@@ -979,9 +1063,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         parts.push(scene.voiceover.trim());
       }
 
-      // Add camera
-      if (scene.cameraAngle) {
-        parts.push(scene.cameraAngle);
+      // Add camera with movement override
+      let cameraInstruction = scene.cameraAngle || '';
+      if (scene.settings?.camera_movement === 'static/fixed') {
+        // Use strongest static camera language per Veo docs: "tripod lock-off (no pan/tilt/roll)"
+        cameraInstruction += cameraInstruction
+          ? ', tripod lock-off, camera is completely static on a tripod, no pan, no tilt, no zoom, no camera motion'
+          : 'Tripod lock-off, camera is completely static on a tripod, no pan, no tilt, no zoom, no camera motion';
+      }
+      if (cameraInstruction) {
+        parts.push(cameraInstruction);
       }
 
       // Add prohibitions
@@ -1397,10 +1488,11 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       // Generate video with optional start/end frames
       // If startFrame is provided, it takes priority over character references
       // If endFrame is provided, it creates a transition to that target frame
-      // Use project-level aspect ratio
+      // Use project-level aspect ratio and scene-level camera movement
       const sceneSettings: GenerationSettings = {
         ...currentSettings,
         aspectRatio: project.aspectRatio ?? AspectRatio.PORTRAIT,
+        camera_movement: scene.settings?.camera_movement,
       };
 
       const video = await generateVideo(
@@ -1713,6 +1805,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
       const sceneSettings: GenerationSettings = {
         ...currentSettings,
         aspectRatio: project.aspectRatio ?? AspectRatio.PORTRAIT,
+        camera_movement: scene.settings?.camera_movement,
       };
 
       setProject((prevProject) => {
@@ -1935,108 +2028,143 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Top Bar - Fixed Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center gap-6">
-          {/* Back to Stories Button */}
-          <button
-            onClick={() => router.push('/')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Stories</span>
-          </button>
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 py-2">
+          <div className="flex items-center justify-between">
+            {/* Left: Logo and Tagline */}
+            <div className="flex items-center gap-6">
+              <div className="flex flex-col items-start">
+                <a href="/" className="cursor-pointer">
+                  <h1 className="text-4xl font-[var(--font-logo)] font-light tracking-wide text-slate-600">echo:</h1>
+                </a>
+                <p className="text-sm text-gray-400">
+                  ai video studio by <span className="bg-gradient-to-r from-gray-500 to-gray-300 bg-clip-text text-transparent">95% ai</span>
+                </p>
+              </div>
 
-          {/* Project Title and Info */}
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold text-gray-900">{project?.title}</h1>
-            <div className="flex items-center gap-3 text-sm">
+              {/* Divider */}
+              <div className="h-12 w-px bg-gray-200" />
+
+              {/* Breadcrumbs and Project Info */}
+              <div className="flex flex-col gap-1">
+                <Breadcrumb>
+                  <BreadcrumbList>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink href="/" className="flex items-center gap-1 text-gray-500 hover:text-gray-900">
+                        <Home className="w-3.5 h-3.5" />
+                        <span>Stories</span>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="text-gray-900 font-medium">{project?.title}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+
+                {/* Project Info Row */}
+                <div className="flex items-center gap-2 text-sm">
+                  {project && (
+                    <>
+                      <button
+                        onClick={() => router.push(`/projects/${projectId}/assets`)}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded text-xs font-medium transition-colors"
+                      >
+                        <ImageIcon className="w-3 h-3" />
+                        <span>Assets</span>
+                        {characterRefs.length > 0 && (
+                          <span className="ml-0.5 px-1 bg-indigo-100 text-indigo-600 rounded text-xs">
+                            {characterRefs.length}
+                          </span>
+                        )}
+                      </button>
+                      {/* Director Badge */}
+                      {project.personaId && DIRECTOR_PERSONAS[project.personaId as DirectorPersona] && (
+                        <div className="flex items-center gap-1.5 bg-white rounded px-1.5 py-0.5 border border-gray-200">
+                          <img
+                            src={DIRECTOR_PERSONAS[project.personaId as DirectorPersona].avatar}
+                            alt={DIRECTOR_PERSONAS[project.personaId as DirectorPersona].directorName}
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                          <span className="text-xs text-gray-600">
+                            {DIRECTOR_PERSONAS[project.personaId as DirectorPersona].directorName}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Story Settings Button */}
               {project && (
-                <>
-                  <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-medium">{project.type}</span>
-                  <button
-                    onClick={() => router.push(`/projects/${projectId}/assets`)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md text-xs font-medium transition-colors"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>Asset Library</span>
-                    {characterRefs.length > 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
-                        {characterRefs.length}
-                      </span>
-                    )}
-                  </button>
-                </>
+                <button
+                  onClick={() => setShowProjectSettings(true)}
+                  className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Story Settings"
+                >
+                  <Settings2 className="w-5 h-5" />
+                </button>
               )}
+
+              {/* Storyboard Button */}
+              {project && (
+                <button
+                  onClick={() => setShowRefsModal(true)}
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="Generate Storyboard"
+                >
+                  <Film className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Preview Your Story Button */}
+              {project && project.scenes.length > 0 && (
+                <button
+                  onClick={() => setShowScriptPreview(true)}
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="Preview Your Story"
+                >
+                  <FileText className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Export Video Button */}
+              <button
+                onClick={handleExportVideo}
+                disabled={isExporting || !project?.scenes.some(s => s.generated && s.videoUrl)}
+                className="p-2 text-green-600 hover:bg-green-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-lg transition-colors"
+                title={isExporting ? "Exporting..." : "Export Video"}
+              >
+                {isExporting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
+              </button>
+
+              {/* Delete Story Button */}
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete Story"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+
+              {/* Help Button - Keyboard Shortcuts */}
+              <button
+                onClick={() => setShowKeyboardShortcuts(true)}
+                className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Keyboard Shortcuts (?)"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
+
+              <CostTracker />
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Story Settings Button */}
-          {project && (
-            <button
-              onClick={() => setShowProjectSettings(true)}
-              className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Story Settings"
-            >
-              <Settings2 className="w-5 h-5" />
-            </button>
-          )}
-
-          {/* Storyboard Button */}
-          {project && (
-            <button
-              onClick={() => setShowRefsModal(true)}
-              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-              title="Generate Storyboard"
-            >
-              <Film className="w-5 h-5" />
-            </button>
-          )}
-
-          {/* Preview Your Story Button */}
-          {project && project.scenes.length > 0 && (
-            <button
-              onClick={() => setShowScriptPreview(true)}
-              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-              title="Preview Your Story"
-            >
-              <FileText className="w-5 h-5" />
-            </button>
-          )}
-
-          {/* Export Video Button */}
-          <button
-            onClick={handleExportVideo}
-            disabled={isExporting || !project?.scenes.some(s => s.generated && s.videoUrl)}
-            className="p-2 text-green-600 hover:bg-green-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-lg transition-colors"
-            title={isExporting ? "Exporting..." : "Export Video"}
-          >
-            {isExporting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Download className="w-5 h-5" />
-            )}
-          </button>
-
-          {/* Delete Story Button */}
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete Story"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-
-          {/* Help Button - Keyboard Shortcuts */}
-          <button
-            onClick={() => setShowKeyboardShortcuts(true)}
-            className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Keyboard Shortcuts (?)"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </button>
-
-          <CostTracker />
         </div>
       </div>
 
@@ -2441,24 +2569,26 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 </div>
               </div>
 
-              {/* Prompt */}
-              <div className="mb-3">
-                <div className="flex items-start gap-2 text-sm text-gray-900">
-                  <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                  <p className="flex-1">{selectedScene.prompt}</p>
-                  <button
-                    onClick={handleCopyPrompt}
-                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
-                    title="Copy full prompt"
-                  >
-                    {copiedPrompt ? (
-                      <Check className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </button>
+              {/* Direction / Acting Guidelines */}
+              {(selectedScene.direction || selectedScene.prompt) && (
+                <div className="mb-3">
+                  <div className="flex items-start gap-2 text-sm text-gray-900">
+                    <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <p className="flex-1">{selectedScene.direction || selectedScene.prompt}</p>
+                    <button
+                      onClick={handleCopyPrompt}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
+                      title="Copy direction"
+                    >
+                      {copiedPrompt ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Voiceover */}
               {selectedScene.voiceover && (
@@ -2565,6 +2695,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                               if (isStoryboardAsset && selectedRef.objectUrl) {
                                 console.log('🎨 Creating synthetic asset for storyboard (skipping database):', assetId);
 
+                                // Get the best available prompt: imagePrompt (from storyboard wizard) > prompt (scene prompt)
+                                const storyboardPrompt = selectedScene?.imagePrompt || selectedScene?.prompt || '';
+                                const sceneName = selectedScene?.title || 'Storyboard Frame';
+
                                 // Create a synthetic Asset object for the EditAssetModal
                                 const syntheticAsset: Asset = {
                                   id: assetId || `storyboard-${Date.now()}`,
@@ -2572,13 +2706,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                                   thumbnailUrl: selectedRef.objectUrl,
                                   type: 'scene',
                                   category: 'storyboard',
-                                  name: `Storyboard Frame`,
-                                  description: 'Storyboard frame from story storage',
+                                  name: sceneName,
+                                  description: storyboardPrompt,
                                   provider: 'upload',
                                   projectId: projectId,
                                   tags: ['storyboard', 'story-storage'],
                                   relatedAssets: [],
-                                  usedInScenes: [],
+                                  usedInScenes: selectedScene ? [selectedScene.id] : [],
                                   version: 1,
                                   parentAssetId: null,
                                   editHistory: [],
@@ -2589,6 +2723,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                                   fileSize: 0,
                                   createdAt: new Date(),
                                   updatedAt: new Date(),
+                                  // Pass the scene's image generation prompt to show in asset editor
+                                  generationPrompt: storyboardPrompt,
                                 };
 
                                 setAssetToEdit(syntheticAsset);
@@ -2857,24 +2993,26 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       </div>
                     </div>
 
-                    {/* Prompt */}
-                    <div className="mb-3">
-                      <div className="flex items-start gap-2 text-sm text-gray-900">
-                        <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                        <p className="flex-1">{selectedScene.prompt}</p>
-                        <button
-                          onClick={handleCopyPrompt}
-                          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
-                          title="Copy full prompt"
-                        >
-                          {copiedPrompt ? (
-                            <Check className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <Copy className="w-4 h-4" />
-                          )}
-                        </button>
+                    {/* Direction / Acting Guidelines */}
+                    {(selectedScene.direction || selectedScene.prompt) && (
+                      <div className="mb-3">
+                        <div className="flex items-start gap-2 text-sm text-gray-900">
+                          <Clapperboard className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                          <p className="flex-1">{selectedScene.direction || selectedScene.prompt}</p>
+                          <button
+                            onClick={handleCopyPrompt}
+                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
+                            title="Copy direction"
+                          >
+                            {copiedPrompt ? (
+                              <Check className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Voiceover */}
                     {selectedScene.voiceover && (
@@ -3197,11 +3335,70 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           }}
           projectId={projectId}
           onStoryboardGenerated={async (frames: StoryboardFrame[]) => {
-            // Storyboard frames saved - reload character refs to pick up new images
+            // Storyboard frames saved - update each scene's referenceMode
             console.log('📸 Storyboard frames generated:', frames.length);
-            // The storyboard frames are already saved via the modal's upload
-            // Reload the refs to update the UI
-            await loadCharacterRefs();
+
+            // Reload assets to get updated storyboard refs
+            const [allProjectAssets, storyboardRefs] = await Promise.all([
+              AssetLoader.loadProjectAssets(project.id),
+              AssetLoader.loadStoryboardAssets(project.id),
+            ]);
+
+            // Build combined refs array (same order as UI shows)
+            const assetGeneratedImages = AssetLoader.assetsToAssetReferences(allProjectAssets);
+            const allAssetRefs = [...assetGeneratedImages, ...storyboardRefs];
+
+            // Update each scene's referenceMode to point to its storyboard frame
+            const updatedScenes = project.scenes.map((scene, index) => {
+              // Find the storyboard ref for this scene by matching sceneId
+              const storyboardRefIndex = allAssetRefs.findIndex(
+                ref => ref.id === `storyboard-${scene.id}`
+              );
+
+              if (storyboardRefIndex >= 0) {
+                // Found storyboard frame - use 1-based index
+                console.log(`📸 Scene "${scene.title}" → storyboard ref index ${storyboardRefIndex + 1}`);
+                return {
+                  ...scene,
+                  referenceMode: storyboardRefIndex + 1,
+                  // Also update direction and imagePrompt from storyboard frame
+                  direction: frames.find(f => f.sceneId === scene.id)?.direction || scene.direction,
+                  imagePrompt: frames.find(f => f.sceneId === scene.id)?.imagePrompt || scene.imagePrompt,
+                };
+              }
+
+              // No storyboard for this scene - keep existing or default
+              return scene;
+            });
+
+            // Update project state with new referenceMode values
+            setProject({
+              ...project,
+              scenes: updatedScenes,
+            });
+
+            // Also update combinedRefs state
+            const assetRefs: GeneratedImage[] = [];
+            for (const assetImg of allAssetRefs) {
+              try {
+                const response = await fetch(assetImg.objectUrl);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  assetRefs.push({
+                    objectUrl: assetImg.objectUrl,
+                    blob,
+                    assetId: assetImg.id,
+                    name: assetImg.name,
+                    description: assetImg.description,
+                  });
+                }
+              } catch (err) {
+                console.log(`Failed to load asset ref: ${assetImg.objectUrl}`, err);
+              }
+            }
+            setCombinedRefs(assetRefs.length > 0 ? assetRefs : characterRefs);
+
+            console.log(`📸 Updated ${updatedScenes.filter(s => typeof s.referenceMode === 'number').length} scenes with storyboard refs`);
           }}
           existingFrames={project.scenes
             .filter(s => {
@@ -3218,8 +3415,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                 frameDescription: s.prompt,
                 imagePrompt: s.imagePrompt || s.prompt,
                 cameraAngle: s.cameraAngle,
-                mood: s.storyboardMood || 'cinematic',
-                keyElements: [],
+                direction: s.direction, // Acting/performance direction
                 speechType: (s.speechType || 'voiceover') as 'voiceover' | 'narration',
                 voiceoverText: s.voiceover,
                 imageUrl: storyboardAsset?.url,
@@ -3236,6 +3432,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           isOpen={showRefSelectModal}
           onClose={() => setShowRefSelectModal(false)}
           characterRefs={combinedRefs.map((ref) => ref.objectUrl)}
+          assetInfo={combinedRefs.map((ref) => ({ url: ref.objectUrl, name: ref.name, description: ref.description }))}
           selectedReference={
             selectedScene.referenceMode ??
             (scenes.findIndex((s) => s.id === selectedScene.id) === 0 ? 1 : 'previous')
@@ -3261,6 +3458,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                   if (isStoryboardAsset) {
                     console.log('🎬 Storyboard asset detected, creating database asset for editing...');
 
+                    // Get the best available prompt: imagePrompt (from storyboard wizard) > prompt (scene prompt)
+                    const storyboardPrompt = selectedScene?.imagePrompt || selectedScene?.prompt || '';
+                    const sceneName = selectedRef.name || selectedScene?.title || 'Storyboard Frame';
+
                     // Create a new database asset from the storyboard image
                     const createResponse = await fetch('/api/assets', {
                       method: 'POST',
@@ -3268,8 +3469,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
                       body: JSON.stringify({
                         projectId: project?.id,
                         type: 'storyboard',
-                        name: `Storyboard ${selectedRef.assetId.replace('storyboard-', '')}`,
-                        description: 'Imported from storyboard for editing',
+                        name: sceneName,
+                        description: selectedRef.description || storyboardPrompt || 'Storyboard frame',
+                        generationPrompt: storyboardPrompt,
                         aspectRatio: project?.aspectRatio || '9:16',
                         imageUrl: selectedRef.objectUrl,
                         tags: ['storyboard', 'imported'],
@@ -3463,6 +3665,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           isOpen={showEndFrameModal}
           onClose={() => setShowEndFrameModal(false)}
           characterRefs={combinedRefs.map((ref) => ref.objectUrl)}
+          assetInfo={combinedRefs.map((ref) => ({ url: ref.objectUrl, name: ref.name, description: ref.description }))}
           selectedEndFrame={selectedScene.endFrameMode ?? 'none'}
           selectedAssetIndex={selectedScene.endFrameAssetIndex}
           onSelectEndFrame={async (mode, assetIndex) => {

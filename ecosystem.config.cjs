@@ -5,8 +5,8 @@ module.exports = {
     args: 'run dev',
     env: {
       NODE_ENV: 'development',
-      AGENT_HUB_API_URL: 'http://localhost:3000/assistant',
-      AGENT_HUB_API_KEY: 'process.env.AGENT_HUB_API_KEY',
+      AGENT_HUB_API_URL: process.env.AGENT_HUB_API_URL || 'http://localhost:3000/assistant',
+      AGENT_HUB_API_KEY: process.env.AGENT_HUB_API_KEY,
     },
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     error_file: './logs/pm2-error.log',

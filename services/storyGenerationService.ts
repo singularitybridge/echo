@@ -100,6 +100,7 @@ Please incorporate this direction into the story while maintaining the selected 
       timestamp: new Date().toISOString(),
       aiPrompt: prompt,
       originalParams: params,
+      inputPrompt: storyGuidance, // The user's original creative direction
     };
 
     console.log('Quick Path story generated:', story.projectMetadata.title);
@@ -158,6 +159,7 @@ export const generateCustomPathStory = async (
       timestamp: new Date().toISOString(),
       aiPrompt: prompt,
       originalParams: params,
+      inputPrompt: params.concept, // The user's original creative direction
     };
 
     console.log('Custom Path story generated:', story.projectMetadata.title);

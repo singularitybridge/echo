@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-logo: var(--font-logo), serif;
+}
+
 /* Screenplay formatting styles */
 .screenplay {
   font-family: 'Courier New', Courier, monospace;

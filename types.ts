@@ -62,4 +62,5 @@ export interface GenerateVideoParams {
   inputVideo?: VideoFile | null;
   inputVideoObject?: Video | null;
   isLooping?: boolean;
+  cameraMovement?: 'static/fixed' | 'dynamic' | string;
 }
