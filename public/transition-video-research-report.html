@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Transition Model Research Report</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-white text-slate-900">
+    <div class="max-w-6xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-4">
+                <i data-lucide="video" class="w-8 h-8 text-slate-900"></i>
+                <h1 class="text-4xl font-light">Video Transition Model Research</h1>
+            </div>
+            <p class="text-lg text-slate-600 ml-11">First-Last Frame Accuracy Analysis</p>
+            <div class="flex gap-2 mt-6 ml-11">
+                <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">Research Report</span>
+                <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">Fal.ai Models</span>
+                <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">January 2025</span>
+            </div>
+        </header>
+
+        <!-- Executive Summary -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="clipboard-list" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">Executive Summary</h2>
+            </div>
+            <div class="ml-9">
+                <div class="p-6 bg-yellow-50 border-l-4 border-yellow-600 rounded-lg">
+                    <div class="flex items-start gap-3">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5"></i>
+                        <div>
+                            <p class="text-slate-900 font-medium mb-2">Current Implementation Has No End Frame Guarantee</p>
+                            <p class="text-sm text-slate-700">
+                                The current implementation uses <code class="px-2 py-0.5 bg-white rounded text-sm">fal-ai/veo3.1/fast/first-last-frame-to-video</code> which has
+                                <strong>NO documented end frame accuracy guarantees</strong>. Research reveals that dedicated keyframe interpolation models provide
+                                significantly better endpoint precision.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- The Problem -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="help-circle" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">The Problem</h2>
+            </div>
+            <div class="ml-9">
+                <p class="text-slate-700 mb-4">
+                    Current transition scenes don't accurately end at the target end frame (start frame of next shot). The expected flow should be:
+                </p>
+                <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                    <div class="flex items-center gap-4 text-sm">
+                        <div class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-center">
+                            <div class="font-medium text-slate-900">Shot 1 Last Frame</div>
+                            <div class="text-xs text-slate-500 mt-1">Reference Start</div>
+                        </div>
+                        <i data-lucide="arrow-right" class="w-5 h-5 text-slate-400"></i>
+                        <div class="px-4 py-2 bg-blue-50 border border-blue-300 rounded-lg text-center flex-1">
+                            <div class="font-medium text-blue-900">TRANSITION VIDEO</div>
+                            <div class="text-xs text-blue-600 mt-1">Should interpolate smoothly</div>
+                        </div>
+                        <i data-lucide="arrow-right" class="w-5 h-5 text-slate-400"></i>
+                        <div class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-center">
+                            <div class="font-medium text-slate-900">Shot 3 First Frame</div>
+                            <div class="text-xs text-slate-500 mt-1">Target End</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded text-sm text-red-800 flex items-start gap-2">
+                        <i data-lucide="x-circle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+                        <span><strong>Issue:</strong> The transition video doesn't match the end frame precisely, causing visual discontinuity.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Model Comparison Table -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="layout-grid" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">Model Comparison</h2>
+            </div>
+            <div class="ml-9 overflow-x-auto">
+                <table class="w-full border-collapse bg-white rounded-lg overflow-hidden border border-slate-200">
+                    <thead>
+                        <tr class="bg-slate-50">
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Model</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Endpoint</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">End Frame Accuracy</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Pricing</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Resolution</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Duration</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b border-slate-200">Key Feature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="px-4 py-4">
+                                <div class="font-medium text-slate-900">Veo 3.1 Fast</div>
+                                <div class="text-xs text-slate-500 mt-1">(CURRENT)</div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <code class="text-xs bg-slate-100 px-2 py-1 rounded">fal-ai/veo3.1/fast/first-last-frame-to-video</code>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="x-circle" class="w-4 h-4 text-red-600"></i>
+                                    <span class="text-sm text-slate-900">No guarantee documented</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-700">$0.15/sec (with audio)</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">720p/1080p</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">4-8 sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">General purpose, may drift</td>
+                        </tr>
+                        <tr class="bg-green-50 border-b border-slate-100">
+                            <td class="px-4 py-4">
+                                <div class="font-medium text-slate-900">WAN 2.1 FLF2V</div>
+                                <div class="text-xs text-green-700 font-medium mt-1">RECOMMENDED</div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <code class="text-xs bg-white px-2 py-1 rounded">fal-ai/wan-flf2v</code>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-green-600"></i>
+                                    <span class="text-sm font-medium text-green-900">98% frame matching rate</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-700">$0.40/generation (720p)</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">480p/720p</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">~3 sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">Bidirectional conditioning</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="px-4 py-4">
+                                <div class="font-medium text-slate-900">Kling O1</div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <code class="text-xs bg-slate-100 px-2 py-1 rounded">fal-ai/kling-video/o1/image-to-video</code>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-green-600"></i>
+                                    <span class="text-sm text-slate-900">Endpoint precision design</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-700">$0.112/sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">Up to 1080p</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">5-10 sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">Deterministic outputs</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-4">
+                                <div class="font-medium text-slate-900">Framepack FLF2V</div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <code class="text-xs bg-slate-100 px-2 py-1 rounded">fal-ai/framepack/flf2v</code>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-green-600"></i>
+                                    <span class="text-sm text-slate-900">Configurable strength (0.8 default)</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-700">$0.0333/sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">480p/720p</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">Up to 75 sec</td>
+                            <td class="px-4 py-4 text-sm text-slate-700">Explicit end frame control</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Detailed Findings -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="search" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">Detailed Findings</h2>
+            </div>
+            <div class="ml-9 space-y-8">
+                <!-- Veo 3.1 Fast -->
+                <div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-3 flex items-center gap-2">
+                        <span class="text-slate-400">1.</span>
+                        Current Model: Veo 3.1 Fast
+                    </h3>
+                    <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                        <ul class="space-y-2 text-sm text-slate-700">
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>No specific end frame accuracy documentation</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Known issues: visual drift, temporal inconsistency</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Motion prediction ~35% improved but "rapid panning still introduces artifacts"</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Prompt length sweet spot: 150-300 characters</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- WAN 2.1 FLF2V -->
+                <div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-3 flex items-center gap-2">
+                        <span class="text-slate-400">2.</span>
+                        WAN 2.1/2.2 FLF2V
+                        <span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">RECOMMENDED</span>
+                    </h3>
+                    <div class="p-6 bg-green-50 rounded-lg border border-green-200">
+                        <ul class="space-y-2 text-sm text-slate-700">
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span><strong class="text-green-900">98% first/last frame matching rate</strong> - explicitly designed for this use case</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span><strong>37% reduced video jitter</strong> compared to similar models</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Uses CLIP semantic features and cross-attention mechanisms</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Bidirectional conditioning: receives guidance from both temporal directions</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span>14B parameter model trained specifically for frame interpolation</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Flat pricing: <strong>$0.40 per 720p generation</strong> (not per second!)</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Kling O1 -->
+                <div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-3 flex items-center gap-2">
+                        <span class="text-slate-400">3.</span>
+                        Kling O1
+                    </h3>
+                    <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                        <ul class="space-y-2 text-sm text-slate-700">
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>"Dual-keyframe approach" specifically for endpoint precision</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>"Trades generation flexibility for endpoint accuracy"</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Quality sweet spot is 3-5 seconds</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Beyond 5 seconds, "temporal consistency degrades"</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Supports @Image1 and @Image2 prompt references</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Framepack FLF2V -->
+                <div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-3 flex items-center gap-2">
+                        <span class="text-slate-400">4.</span>
+                        Framepack FLF2V
+                    </h3>
+                    <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                        <ul class="space-y-2 text-sm text-slate-700">
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Has explicit <code class="px-2 py-0.5 bg-white rounded text-xs">strength</code> parameter (0-1) controlling end frame influence</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Higher values = output more heavily influenced by last frame</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                                <span>Default 0.8 provides balance between prompt and destination frame</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                <span>Very cheap: <strong>$0.0333/sec</strong></span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recommendations -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="lightbulb" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">Recommendations</h2>
+            </div>
+            <div class="ml-9 space-y-6">
+                <!-- Option A -->
+                <div class="p-6 bg-green-50 rounded-lg border-2 border-green-600">
+                    <div class="flex items-start gap-3 mb-3">
+                        <span class="px-3 py-1 bg-green-600 text-white text-sm font-medium rounded">Option A</span>
+                        <span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded">Recommended</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-2">Switch to WAN 2.1 FLF2V</h3>
+                    <ul class="space-y-2 text-sm text-slate-700">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Best documented end frame accuracy (98%)</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Purpose-built for keyframe interpolation</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Cost-effective flat rate pricing</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5"></i>
+                            <span>API: <code class="px-2 py-0.5 bg-white rounded text-xs">fal-ai/wan-flf2v</code></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Option B -->
+                <div class="p-6 bg-blue-50 rounded-lg border border-blue-300">
+                    <div class="flex items-start gap-3 mb-3">
+                        <span class="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded">Option B</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-2">Try Kling O1</h3>
+                    <ul class="space-y-2 text-sm text-slate-700">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Designed for "deterministic video outputs"</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Good for narrative scene transitions</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="minus" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                            <span>Slightly more expensive but quality-focused</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                            <span>API: <code class="px-2 py-0.5 bg-white rounded text-xs">fal-ai/kling-video/o1/image-to-video</code></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Option C -->
+                <div class="p-6 bg-slate-50 rounded-lg border border-slate-300">
+                    <div class="flex items-start gap-3 mb-3">
+                        <span class="px-3 py-1 bg-slate-600 text-white text-sm font-medium rounded">Option C</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-2">Use Framepack with High Strength</h3>
+                    <ul class="space-y-2 text-sm text-slate-700">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Set <code class="px-2 py-0.5 bg-white rounded text-xs">strength: 0.95</code> or higher for maximum end frame fidelity</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5"></i>
+                            <span>Very cost-effective</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="check" class="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5"></i>
+                            <span>API: <code class="px-2 py-0.5 bg-white rounded text-xs">fal-ai/framepack/flf2v</code></span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Parameters -->
+        <section class="mb-16 fade-in">
+            <div class="flex items-center gap-3 mb-6">
+                <i data-lucide="code" class="w-6 h-6 text-slate-900"></i>
+                <h2 class="text-2xl font-light">API Parameters for Implementation</h2>
+            </div>
+            <div class="ml-9 space-y-8">
+                <!-- WAN 2.1 FLF2V -->
+                <div>
+                    <h3 class="text-sm font-medium text-slate-700 uppercase tracking-wider mb-3">WAN 2.1 FLF2V</h3>
+                    <div class="bg-[#0f172a] p-6 rounded-lg overflow-x-auto">
+                        <pre class="text-sm text-slate-300 mono"><span class="text-blue-400">endpoint:</span> <span class="text-green-400">"fal-ai/wan-flf2v"</span>
+<span class="text-blue-400">input:</span> {
+  <span class="text-purple-400">first_frame_url:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">last_frame_url:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">prompt:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">aspect_ratio:</span> <span class="text-green-400">"16:9"</span> | <span class="text-green-400">"9:16"</span>,
+  <span class="text-purple-400">resolution:</span> <span class="text-green-400">"720p"</span>,
+  <span class="text-purple-400">frames:</span> <span class="text-yellow-400">81</span>-<span class="text-yellow-400">100</span>,
+  <span class="text-purple-400">frame_rate:</span> <span class="text-yellow-400">16</span>-<span class="text-yellow-400">24</span>
+}</pre>
+                    </div>
+                </div>
+
+                <!-- Kling O1 -->
+                <div>
+                    <h3 class="text-sm font-medium text-slate-700 uppercase tracking-wider mb-3">Kling O1</h3>
+                    <div class="bg-[#0f172a] p-6 rounded-lg overflow-x-auto">
+                        <pre class="text-sm text-slate-300 mono"><span class="text-blue-400">endpoint:</span> <span class="text-green-400">"fal-ai/kling-video/o1/image-to-video"</span>
+<span class="text-blue-400">input:</span> {
+  <span class="text-purple-400">image_url:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">last_frame_image:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">prompt:</span> <span class="text-green-400">"Use @Image1 for start and @Image2 for end"</span>,
+  <span class="text-purple-400">aspect_ratio:</span> <span class="text-green-400">"16:9"</span> | <span class="text-green-400">"9:16"</span>,
+  <span class="text-purple-400">duration:</span> <span class="text-green-400">"5"</span> | <span class="text-green-400">"10"</span>
+}</pre>
+                    </div>
+                </div>
+
+                <!-- Framepack FLF2V -->
+                <div>
+                    <h3 class="text-sm font-medium text-slate-700 uppercase tracking-wider mb-3">Framepack FLF2V</h3>
+                    <div class="bg-[#0f172a] p-6 rounded-lg overflow-x-auto">
+                        <pre class="text-sm text-slate-300 mono"><span class="text-blue-400">endpoint:</span> <span class="text-green-400">"fal-ai/framepack/flf2v"</span>
+<span class="text-blue-400">input:</span> {
+  <span class="text-purple-400">image_url:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">end_image_url:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">prompt:</span> <span class="text-green-400">"..."</span>,
+  <span class="text-purple-400">strength:</span> <span class="text-yellow-400">0.95</span>,  <span class="text-slate-500">// High value for end frame fidelity</span>
+  <span class="text-purple-400">aspect_ratio:</span> <span class="text-green-400">"16:9"</span> | <span class="text-green-400">"9:16"</span>,
+  <span class="text-purple-400">resolution:</span> <span class="text-green-400">"720p"</span>,
+  <span class="text-purple-400">num_frames:</span> <span class="text-yellow-400">120</span>
+}</pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sources -->
+        <footer class="pt-8 mt-16 border-t border-slate-200">
+            <div class="flex items-center gap-3 mb-4">
+                <i data-lucide="link" class="w-5 h-5 text-slate-600"></i>
+                <h3 class="text-sm font-medium text-slate-700 uppercase tracking-wider">Sources</h3>
+            </div>
+            <ul class="ml-8 space-y-2 text-sm text-slate-600">
+                <li>
+                    <a href="https://fal.ai/models/fal-ai/wan-flf2v" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://fal.ai/models/fal-ai/wan-flf2v</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="https://fal.ai/models/fal-ai/kling-video/o1/image-to-video" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://fal.ai/models/fal-ai/kling-video/o1/image-to-video</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="https://fal.ai/models/fal-ai/veo3.1/first-last-frame-to-video" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://fal.ai/models/fal-ai/veo3.1/first-last-frame-to-video</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="https://fal.ai/models/fal-ai/framepack/flf2v/api" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://fal.ai/models/fal-ai/framepack/flf2v/api</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="https://blog.fal.ai/google-veo-3-1-vs-3-0-worth-the-upgrade/" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://blog.fal.ai/google-veo-3-1-vs-3-0-worth-the-upgrade/</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="https://wan2-1.com/blogs/model-wan-flf2v" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                        <span>https://wan2-1.com/blogs/model-wan-flf2v</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="mt-8 text-center text-sm text-slate-500">
+                <p>Report generated: January 2025</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

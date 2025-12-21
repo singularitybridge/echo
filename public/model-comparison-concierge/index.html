@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Comparison: Concierge Transition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    video { max-height: 500px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">Model Comparison: Concierge Transition</h1>
+      <p class="text-gray-600">The Concierge's Chaotic Weekend - Scene 1 → Scene 2</p>
+      <p class="text-sm text-indigo-600 font-medium mt-2">Director's Vision: Wes Anderson Storybook Tableau Morph</p>
+    </div>
+
+    <!-- Frames -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">Start & End Frames</h2>
+      <div class="grid grid-cols-2 gap-6">
+        <div>
+          <p class="text-sm text-gray-500 mb-2">Scene 1: Lobby Desk</p>
+          <img src="start-frame.png" alt="Start Frame" class="rounded-lg border border-gray-200 w-full max-h-96 object-contain bg-gray-100">
+        </div>
+        <div>
+          <p class="text-sm text-gray-500 mb-2">Scene 2: Hallway with Guests</p>
+          <img src="end-frame.png" alt="End Frame" class="rounded-lg border border-gray-200 w-full max-h-96 object-contain bg-gray-100">
+        </div>
+      </div>
+    </div>
+
+    <!-- Director's Prompt -->
+    <div class="bg-indigo-50 rounded-xl border border-indigo-100 p-6 mb-8">
+      <h2 class="text-lg font-semibold text-indigo-900 mb-2">Director's Prompt</h2>
+      <p class="text-indigo-800 text-sm leading-relaxed">
+        Static locked-off camera, perfectly centered symmetrical frame throughout. Magical storybook transformation:
+        the vintage hotel lobby with pink desk and mint striped wallpaper seamlessly morphs into a pastel pink hallway.
+        The mustached concierge in tweed remains perfectly centered and still as three eccentric guests materialize
+        around him. Wes Anderson aesthetic, dreamlike tableau transition, pastel color palette, soft flat lighting.
+        The camera never moves - only the world transforms like turning a page in an illustrated book.
+      </p>
+    </div>
+
+    <!-- Results Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="results">
+      <!-- Vidu Q1 -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Vidu Q1</h3>
+            <span class="text-sm text-gray-500" id="time-viduQ1">--</span>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-gray-100 flex items-center justify-center">
+          <video id="video-viduQ1" controls loop class="w-full h-full object-contain">
+            <source src="vidu-q1.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+
+      <!-- WAN 2.1 -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">WAN 2.1</h3>
+            <span class="text-sm text-gray-500" id="time-wan21">--</span>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-gray-100 flex items-center justify-center">
+          <video id="video-wan21" controls loop class="w-full h-full object-contain">
+            <source src="wan21.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+
+      <!-- Veo 3.1 -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Veo 3.1 Fast</h3>
+            <span class="text-sm text-gray-500" id="time-veo31">--</span>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-gray-100 flex items-center justify-center">
+          <video id="video-veo31" controls loop class="w-full h-full object-contain">
+            <source src="veo31.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+
+      <!-- Minimax Pro -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Minimax Pro</h3>
+            <span class="text-sm text-gray-500" id="time-minimaxPro">--</span>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-gray-100 flex items-center justify-center">
+          <video id="video-minimaxPro" controls loop class="w-full h-full object-contain">
+            <source src="minimax-pro.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+
+      <!-- Luma Ray 2 -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Luma Ray 2</h3>
+            <span class="text-sm text-gray-500" id="time-lumaRay2">--</span>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-gray-100 flex items-center justify-center">
+          <video id="video-lumaRay2" controls loop class="w-full h-full object-contain">
+            <source src="luma-ray2.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">Evaluation Criteria</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="p-4 bg-gray-50 rounded-lg">
+          <h3 class="font-medium text-gray-700 mb-2">Camera Stability</h3>
+          <p class="text-gray-600">Does it maintain the static, locked-off Wes Anderson framing?</p>
+        </div>
+        <div class="p-4 bg-gray-50 rounded-lg">
+          <h3 class="font-medium text-gray-700 mb-2">Symmetry Preservation</h3>
+          <p class="text-gray-600">Is the centered composition maintained throughout?</p>
+        </div>
+        <div class="p-4 bg-gray-50 rounded-lg">
+          <h3 class="font-medium text-gray-700 mb-2">End Frame Accuracy</h3>
+          <p class="text-gray-600">Does it arrive at the exact target end frame?</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-sm text-gray-500">
+      <p>Generated with VEO Studio Model Comparison Tool</p>
+    </div>
+  </div>
+
+  <script>
+    // Load results and update times
+    fetch('results.json')
+      .then(r => r.json())
+      .then(results => {
+        for (const [model, data] of Object.entries(results)) {
+          const timeEl = document.getElementById(`time-${model}`);
+          if (timeEl && data.success) {
+            timeEl.textContent = `${data.time}s`;
+          } else if (timeEl) {
+            timeEl.textContent = 'Failed';
+            timeEl.classList.add('text-red-500');
+          }
+        }
+      })
+      .catch(() => console.log('Results not yet available'));
+  </script>
+</body>
+</html>

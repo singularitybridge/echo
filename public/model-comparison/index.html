@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transition Video Model Comparison</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Shoelace -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2/cdn/themes/dark.css">
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2/cdn/shoelace-autoloader.js"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        body {
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .video-card {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .reference-frame {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .reference-frame img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .prompt-box {
+            background: #2a2a2a;
+            border-left: 4px solid #6366f1;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .recommendation-box {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1f3a2a 100%);
+            border: 2px solid #10b981;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        .badge-fast {
+            background: #10b981;
+            color: #fff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-slow {
+            background: #f59e0b;
+            color: #000;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-recommended {
+            background: #10b981;
+            color: #fff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        .stat-label {
+            color: #9ca3af;
+        }
+
+        .stat-value {
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .finding-item {
+            background: #2a2a2a;
+            border-left: 3px solid #6366f1;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-7xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <header class="mb-12 text-center">
+            <div class="flex items-center justify-center gap-3 mb-4">
+                <i data-lucide="film" class="w-10 h-10 text-indigo-400"></i>
+                <h1 class="text-5xl font-light text-white">Transition Video Model Comparison</h1>
+            </div>
+            <p class="text-lg text-gray-400 max-w-3xl mx-auto">
+                Comparing first-last-frame-to-video models for smooth scene transitions
+            </p>
+        </header>
+
+        <!-- Reference Frames -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-light mb-6 flex items-center gap-2">
+                <i data-lucide="image" class="w-6 h-6 text-indigo-400"></i>
+                Reference Frames
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="reference-frame">
+                    <img src="/model-comparison/start-frame.png" alt="Start Frame">
+                    <p class="text-sm text-gray-400 mt-3 text-center">Start Frame - Last frame of Scene 1</p>
+                </div>
+                <div class="reference-frame">
+                    <img src="/model-comparison/end-frame.png" alt="End Frame">
+                    <p class="text-sm text-gray-400 mt-3 text-center">End Frame - First frame of Scene 2</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prompt -->
+        <section class="mb-12">
+            <div class="prompt-box">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="message-square" class="w-5 h-5 text-indigo-400 mt-1"></i>
+                    <div>
+                        <h3 class="font-semibold mb-2 text-gray-300">Generation Prompt</h3>
+                        <p class="text-gray-100 leading-relaxed">
+                            "Smooth visual transition morphing from weathered hotel exterior to renovated modern facade, same camera angle and framing, time-lapse style transformation, architectural metamorphosis"
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Video Comparison Grid -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-light mb-6 flex items-center gap-2">
+                <i data-lucide="grid-3x3" class="w-6 h-6 text-indigo-400"></i>
+                Model Comparison
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Veo 3.1 Fast -->
+                <div class="video-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xl font-semibold text-white">Veo 3.1 Fast</h3>
+                        <span class="badge-fast">Fast</span>
+                    </div>
+                    <video controls preload="metadata">
+                        <source src="/model-comparison/veo31-fast.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="mt-4">
+                        <div class="stat-row">
+                            <span class="stat-label">Generation Time:</span>
+                            <span class="stat-value">40.5s</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Pricing:</span>
+                            <span class="stat-value">$0.15/sec</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">End Frame Accuracy:</span>
+                            <span class="stat-value text-yellow-400">Not Guaranteed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WAN 2.1 FLF2V -->
+                <div class="video-card" style="border: 2px solid #10b981;">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xl font-semibold text-white">WAN 2.1 FLF2V</h3>
+                        <div class="flex gap-2">
+                            <span class="badge-recommended">Recommended</span>
+                            <span class="badge-fast">Fast</span>
+                        </div>
+                    </div>
+                    <video controls preload="metadata">
+                        <source src="/model-comparison/wan21-flf2v.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="mt-4">
+                        <div class="stat-row">
+                            <span class="stat-label">Generation Time:</span>
+                            <span class="stat-value">38.9s</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Pricing:</span>
+                            <span class="stat-value">$0.40/gen</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">End Frame Accuracy:</span>
+                            <span class="stat-value text-green-400">98% Match Rate</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vidu Q1 -->
+                <div class="video-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xl font-semibold text-white">Vidu Q1</h3>
+                    </div>
+                    <video controls preload="metadata">
+                        <source src="/model-comparison/vidu-q1.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="mt-4">
+                        <div class="stat-row">
+                            <span class="stat-label">Generation Time:</span>
+                            <span class="stat-value">143.5s</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Pricing:</span>
+                            <span class="stat-value">~$0.50/gen</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Quality:</span>
+                            <span class="stat-value text-blue-400">Good</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Framepack FLF2V -->
+                <div class="video-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xl font-semibold text-white">Framepack FLF2V</h3>
+                        <span class="badge-slow">Slow</span>
+                    </div>
+                    <video controls preload="metadata">
+                        <source src="/model-comparison/framepack-flf2v.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="mt-4">
+                        <div class="stat-row">
+                            <span class="stat-label">Generation Time:</span>
+                            <span class="stat-value">352.7s</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Pricing:</span>
+                            <span class="stat-value">$0.033/sec</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Best For:</span>
+                            <span class="stat-value text-blue-400">Budget Projects</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Findings -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-light mb-6 flex items-center gap-2">
+                <i data-lucide="search" class="w-6 h-6 text-indigo-400"></i>
+                Key Findings
+            </h2>
+
+            <div class="finding-item">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-400 mt-1"></i>
+                    <div>
+                        <h3 class="font-semibold text-white mb-1">WAN 2.1 FLF2V</h3>
+                        <p class="text-gray-300">98% frame matching rate with fastest generation time. Excellent balance of speed, quality, and frame accuracy. <strong>Recommended for production use.</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="finding-item">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="alert-circle" class="w-5 h-5 text-yellow-400 mt-1"></i>
+                    <div>
+                        <h3 class="font-semibold text-white mb-1">Veo 3.1 Fast</h3>
+                        <p class="text-gray-300">Good quality and fast generation, but does not guarantee end frame accuracy. Best for general video generation, not ideal for precise scene transitions.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="finding-item">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="info" class="w-5 h-5 text-blue-400 mt-1"></i>
+                    <div>
+                        <h3 class="font-semibold text-white mb-1">Vidu Q1</h3>
+                        <p class="text-gray-300">Solid quality with moderate generation speed. Good alternative when WAN 2.1 is unavailable, though slower than WAN 2.1.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="finding-item">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="dollar-sign" class="w-5 h-5 text-green-400 mt-1"></i>
+                    <div>
+                        <h3 class="font-semibold text-white mb-1">Framepack FLF2V</h3>
+                        <p class="text-gray-300">Most affordable option at $0.033/sec, but significantly slower generation time (6x slower than WAN 2.1). Best for budget-conscious projects where time is not critical.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recommendation -->
+        <section>
+            <div class="recommendation-box">
+                <div class="flex items-start gap-4">
+                    <i data-lucide="award" class="w-12 h-12 text-green-400"></i>
+                    <div>
+                        <h2 class="text-3xl font-semibold text-white mb-3">Recommended Model</h2>
+                        <h3 class="text-2xl text-green-400 mb-4">WAN 2.1 FLF2V</h3>
+                        <p class="text-gray-200 text-lg leading-relaxed mb-4">
+                            For transition scenes requiring precise frame-to-frame continuity, WAN 2.1 FLF2V is the clear winner with its 98% frame matching rate, fastest generation time (38.9s), and reasonable pricing at $0.40/gen.
+                        </p>
+                        <div class="flex flex-wrap gap-3 mt-6">
+                            <div class="flex items-center gap-2 bg-green-900/30 px-4 py-2 rounded-lg">
+                                <i data-lucide="zap" class="w-4 h-4 text-green-400"></i>
+                                <span class="text-sm text-gray-200">Fastest Generation</span>
+                            </div>
+                            <div class="flex items-center gap-2 bg-green-900/30 px-4 py-2 rounded-lg">
+                                <i data-lucide="target" class="w-4 h-4 text-green-400"></i>
+                                <span class="text-sm text-gray-200">98% Frame Accuracy</span>
+                            </div>
+                            <div class="flex items-center gap-2 bg-green-900/30 px-4 py-2 rounded-lg">
+                                <i data-lucide="trending-up" class="w-4 h-4 text-green-400"></i>
+                                <span class="text-sm text-gray-200">Best Quality/Speed Ratio</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="pt-8 mt-16 border-t border-gray-800 text-center text-sm text-gray-500">
+            <p>Video Model Comparison | Generated on 2025-12-20</p>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
