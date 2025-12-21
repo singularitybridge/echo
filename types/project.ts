@@ -23,8 +23,11 @@ export interface SceneAssetAttachment {
   order: number; // Display/reference order (0-based)
 }
 
+export type SceneType = 'shot' | 'transition';
+
 export interface Scene {
   id: string;
+  sceneType?: SceneType; // 'shot' (default) or 'transition' - transitions use first-last-frame generation
   title: string;
   duration: number;
   prompt: string; // Visual description for video generation

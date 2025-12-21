@@ -383,3 +383,49 @@ Then update `/data/projects.db.json` by adding the project to the `projects` obj
 **Story editing not working**: Check Agent Hub credentials and ensure story-editor agent exists in Agent Hub
 
 **Export failing**: Ensure FFmpeg is installed on server/system
+
+## Documentation Maintenance
+
+After implementing significant features or changes, update the documentation:
+
+### Changelog Updates
+
+Update `/docs/changelog.mdx` when adding:
+- New features (e.g., drag-and-drop, new modals, new capabilities)
+- New AI models or providers
+- Breaking changes or deprecations
+- Bug fixes that affect user experience
+
+**Changelog Format**:
+```markdown
+### Feature Name
+
+Brief description of the feature.
+
+- Bullet point of key capability
+- Another capability
+- Implementation detail if relevant
+```
+
+### Feature Documentation
+
+For complex features, create a dedicated doc page in `/docs/` and add it to the docs page array in `/app/docs/page.tsx`:
+
+```typescript
+const DOCS: DocItem[] = [
+  // ... existing docs
+  {
+    id: 'feature-name',
+    title: 'Feature Name',
+    description: 'Brief description',
+    category: 'Features',
+  },
+];
+```
+
+### When to Update Docs
+
+1. After implementing a new user-facing feature
+2. After adding new configuration options
+3. After changing existing workflows
+4. After adding new AI agents or personas

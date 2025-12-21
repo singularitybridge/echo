@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp, Ban, Home } from 'lucide-react';
+import { Play, Loader2, Film, CheckCircle2, Settings, Settings2, MessageSquare, AlertCircle, Search, Copy, Check, ArrowLeft, ArrowRight, X, Image as ImageIcon, Download, ImagePlus, HelpCircle, Paperclip, Radio, Trash2, FileText, Edit3, Sparkles, Edit2, ExternalLink, Camera, Mic, Clapperboard, ChevronDown, ChevronUp, Ban, Home, GripVertical } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -41,6 +41,10 @@ import type { VideoGenerationModel, VideoGenerationResult } from '@/types/ai-mod
 import VideoResultSelectionModal from './VideoResultSelectionModal';
 import { getAllVideoGenerationModels } from '@/lib/ai-models';
 import { DIRECTOR_PERSONAS, DirectorPersona } from '@/types/director-personas';
+import { InsertTransitionModal } from './InsertTransitionModal';
+import { InsertShotModal } from './InsertShotModal';
+import { SceneType } from '../types/project';
+import { Plus, Zap } from 'lucide-react';
 
 /**
  * Helper function to load attached assets from a scene
@@ -165,6 +169,16 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const [showStartFrameEditor, setShowStartFrameEditor] = useState<boolean>(false);
   const [startFrameEditorMode, setStartFrameEditorMode] = useState<'generate' | 'edit'>('generate');
 
+  // Insert between shots state
+  const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null);
+  const [showInsertTransitionModal, setShowInsertTransitionModal] = useState<boolean>(false);
+  const [showInsertShotModal, setShowInsertShotModal] = useState<boolean>(false);
+  const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
+
+  // Drag-and-drop reorder state
+  const [draggedSceneIndex, setDraggedSceneIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+
   // Right panel view toggle
   const [rightPanelView, setRightPanelView] = useState<'details' | 'chat' | 'analysis'>('details');
 
@@ -188,6 +202,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [videoPlayerActivated, setVideoPlayerActivated] = useState<boolean>(false); // Track if user has interacted with video
+  const isManualSeekRef = useRef<boolean>(false); // Track manual seeks to prevent auto-progression
 
   // Default generation settings (aspect ratio is now project-level)
   const [currentSettings, setCurrentSettings] = useState<Omit<GenerationSettings, 'aspectRatio'>>({
@@ -977,6 +992,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           e.preventDefault();
           if (videoRef.current && selectedScene) {
             setVideoPlayerActivated(true); // Activate video player
+            isManualSeekRef.current = true; // Prevent auto-progression to next scene
             const video = videoRef.current;
             const endTrim = selectedScene.endTrim ?? selectedScene.duration;
             video.currentTime = endTrim;
@@ -1255,6 +1271,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
         video.pause();
         video.currentTime = endTrim;
         setCurrentTime(endTrim);
+
+        // Skip auto-progression if this was a manual seek (e.g., pressing End key)
+        if (isManualSeekRef.current) {
+          isManualSeekRef.current = false;
+          setIsPlaying(false);
+          return;
+        }
 
         // Handle Play All progression when hitting trim point
         if (isPlayingAll) {
@@ -2025,6 +2048,163 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
     }
   };
 
+  // Insert transition between shots
+  const handleInsertTransition = (config: {
+    prompt: string;
+    duration: number;
+    model: 'veo31' | 'wan21' | 'vidu';
+    presetId?: string;
+  }) => {
+    if (!project) return;
+
+    const newScene: Scene = {
+      id: `scene-transition-${Date.now()}`,
+      sceneType: 'transition',
+      title: config.presetId
+        ? `Transition: ${config.presetId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`
+        : 'Custom Transition',
+      duration: config.duration,
+      prompt: config.prompt,
+      cameraAngle: 'Dynamic',
+      generated: false,
+      referenceMode: 'previous', // Use last frame from previous shot
+      endFrameMode: 'next-shot', // Use first frame from next shot
+      settings: {
+        model: config.model === 'veo31' ? VeoModel.VEO : VeoModel.VEO,
+        aspectRatio: project.aspectRatio || AspectRatio.PORTRAIT,
+        resolution: project.defaultResolution || Resolution.P720,
+        isLooping: false,
+      },
+    };
+
+    // Insert at the specified index
+    const updatedScenes = [...project.scenes];
+    updatedScenes.splice(insertAtIndex, 0, newScene);
+
+    const updatedProject = {
+      ...project,
+      scenes: updatedScenes,
+      updatedAt: Date.now(),
+    };
+
+    setProject(updatedProject);
+    projectStorage.saveProject(projectId, updatedProject);
+
+    // Select the new scene
+    setSelectedSceneId(newScene.id);
+    console.log('[Insert Transition] Created transition scene:', newScene.id, 'at index:', insertAtIndex);
+  };
+
+  // Insert new shot between existing shots
+  const handleInsertShot = (config: {
+    title: string;
+    prompt: string;
+    voiceover?: string;
+    cameraAngle: string;
+    duration: number;
+  }) => {
+    if (!project) return;
+
+    const newScene: Scene = {
+      id: `scene-${Date.now()}`,
+      sceneType: 'shot',
+      title: config.title,
+      duration: config.duration,
+      prompt: config.prompt,
+      cameraAngle: config.cameraAngle,
+      voiceover: config.voiceover,
+      generated: false,
+      referenceMode: 'previous', // Use last frame from previous shot for continuity
+      endFrameMode: 'next-shot', // Use first frame from next shot for continuity
+      settings: {
+        model: project.defaultModel || VeoModel.VEO,
+        aspectRatio: project.aspectRatio || AspectRatio.PORTRAIT,
+        resolution: project.defaultResolution || Resolution.P720,
+        isLooping: false,
+      },
+    };
+
+    // Insert at the specified index
+    const updatedScenes = [...project.scenes];
+    updatedScenes.splice(insertAtIndex, 0, newScene);
+
+    const updatedProject = {
+      ...project,
+      scenes: updatedScenes,
+      updatedAt: Date.now(),
+    };
+
+    setProject(updatedProject);
+    projectStorage.saveProject(projectId, updatedProject);
+
+    // Select the new scene
+    setSelectedSceneId(newScene.id);
+    console.log('[Insert Shot] Created shot:', newScene.id, 'at index:', insertAtIndex);
+  };
+
+  // Drag-and-drop handlers for scene reordering
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedSceneIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    // Add a slight delay to show the drag effect
+    setTimeout(() => {
+      const target = e.target as HTMLElement;
+      target.style.opacity = '0.5';
+    }, 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    const target = e.target as HTMLElement;
+    target.style.opacity = '1';
+    setDraggedSceneIndex(null);
+    setDropTargetIndex(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedSceneIndex !== null && draggedSceneIndex !== index) {
+      setDropTargetIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDropTargetIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedSceneIndex === null || draggedSceneIndex === dropIndex) {
+      setDraggedSceneIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    // Reorder scenes array
+    const newScenes = [...scenes];
+    const [draggedScene] = newScenes.splice(draggedSceneIndex, 1);
+    newScenes.splice(dropIndex, 0, draggedScene);
+
+    // Update project with reordered scenes
+    const updatedProject = {
+      ...project,
+      scenes: newScenes,
+      updatedAt: Date.now(),
+    };
+
+    setProject(updatedProject);
+    projectStorage.saveProject(projectId, updatedProject);
+
+    // Keep the dragged scene selected
+    setSelectedSceneId(draggedScene.id);
+
+    console.log(`[Drag-Drop] Moved scene from index ${draggedSceneIndex} to ${dropIndex}`);
+
+    setDraggedSceneIndex(null);
+    setDropTargetIndex(null);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Top Bar - Fixed Header */}
@@ -2204,73 +2384,157 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
             }
 
             return (
-              <button
-                key={scene.id}
-                onClick={() => setSelectedSceneId(scene.id)}
-                className={`w-full text-left p-2 mb-2 rounded-lg transition-all ${
-                  selectedSceneId === scene.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <div className="flex gap-2">
-                  {/* Thumbnail */}
-                  <div className="w-12 h-20 flex-shrink-0 rounded overflow-hidden bg-gray-50 border border-gray-200">
-                    {thumbnailUrl ? (
-                      <img
-                        src={thumbnailUrl}
-                        alt={`Scene ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : isReference ? (
-                      <div className="w-full h-full flex items-center justify-center bg-indigo-50">
-                        <ImageIcon className="w-5 h-5 text-indigo-300" />
-                      </div>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
-                        <Film className="w-5 h-5 text-indigo-300" />
-                      </div>
-                    )}
-                  </div>
+              <React.Fragment key={scene.id}>
+                {/* Drop indicator line - appears above when dragging over */}
+                {dropTargetIndex === index && draggedSceneIndex !== null && draggedSceneIndex > index && (
+                  <div className="h-1 bg-indigo-500 rounded-full mx-1 mb-1 animate-pulse" />
+                )}
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-mono ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-400'}`}>
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
-                        <span className="font-medium text-sm">{scene.title}</span>
-                        {/* Flow Indicator */}
-                        {isReference ? (
-                          <ImageIcon
-                            className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-indigo-500'}`}
-                          />
-                        ) : (
-                          <Film
-                            className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-purple-200' : 'text-purple-500'}`}
-                          />
-                        )}
+                {/* Scene Card - Draggable */}
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  className={`relative group ${draggedSceneIndex === index ? 'opacity-50' : ''}`}
+                >
+                  <button
+                    onClick={() => setSelectedSceneId(scene.id)}
+                    className={`w-full text-left p-2 rounded-lg transition-all ${
+                      selectedSceneId === scene.id
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <div className="flex gap-2">
+                      {/* Drag Handle */}
+                      <div
+                        className={`flex items-center justify-center w-4 flex-shrink-0 cursor-grab active:cursor-grabbing ${
+                          selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-300 group-hover:text-gray-400'
+                        }`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <GripVertical className="w-4 h-4" />
                       </div>
-                      {generatingSceneIds.has(scene.id) ? (
-                        <Loader2 className="w-4 h-4 text-indigo-400 animate-spin flex-shrink-0" />
-                      ) : scene.generated ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                      ) : null}
+                    {/* Thumbnail */}
+                    <div className="w-12 h-20 flex-shrink-0 rounded overflow-hidden bg-gray-50 border border-gray-200">
+                      {thumbnailUrl ? (
+                        <img
+                          src={thumbnailUrl}
+                          alt={`Scene ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : isReference ? (
+                        <div className="w-full h-full flex items-center justify-center bg-indigo-50">
+                          <ImageIcon className="w-5 h-5 text-indigo-300" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
+                          <Film className="w-5 h-5 text-indigo-300" />
+                        </div>
+                      )}
                     </div>
-                    <p className={`text-xs line-clamp-2 mt-1 ${selectedSceneId === scene.id ? 'text-indigo-100' : 'text-gray-400'}`}>
-                      {scene.prompt}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-500'}`}>{scene.duration}s</span>
-                      <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-300' : 'text-gray-600'}`}>•</span>
-                      <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-500'}`}>
-                        {scene.cameraAngle}
-                      </span>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-mono ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-400'}`}>
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
+                          <span className="font-medium text-sm">{scene.title}</span>
+                          {/* Scene Type Indicator */}
+                          {scene.sceneType === 'transition' ? (
+                            <Zap
+                              className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-amber-200' : 'text-amber-500'}`}
+                            />
+                          ) : isReference ? (
+                            <ImageIcon
+                              className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-indigo-500'}`}
+                            />
+                          ) : (
+                            <Film
+                              className={`w-3.5 h-3.5 flex-shrink-0 ${selectedSceneId === scene.id ? 'text-purple-200' : 'text-purple-500'}`}
+                            />
+                          )}
+                        </div>
+                        {generatingSceneIds.has(scene.id) ? (
+                          <Loader2 className="w-4 h-4 text-indigo-400 animate-spin flex-shrink-0" />
+                        ) : scene.generated ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                        ) : null}
+                      </div>
+                      <p className={`text-xs line-clamp-2 mt-1 ${selectedSceneId === scene.id ? 'text-indigo-100' : 'text-gray-400'}`}>
+                        {scene.prompt}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-500'}`}>{scene.duration}s</span>
+                        <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-300' : 'text-gray-600'}`}>•</span>
+                        <span className={`text-xs ${selectedSceneId === scene.id ? 'text-indigo-200' : 'text-gray-500'}`}>
+                          {scene.cameraAngle}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  </button>
                 </div>
-              </button>
+
+                {/* Drop indicator line - appears below when dragging over from above */}
+                {dropTargetIndex === index && draggedSceneIndex !== null && draggedSceneIndex < index && (
+                  <div className="h-1 bg-indigo-500 rounded-full mx-1 mt-1 animate-pulse" />
+                )}
+
+                {/* Insert Zone - Between Shots */}
+                {index < scenes.length - 1 && (
+                  <div
+                    className="group relative h-6 my-1 flex items-center justify-center cursor-pointer"
+                    onMouseEnter={() => setHoveredInsertIndex(index)}
+                    onMouseLeave={() => setHoveredInsertIndex(null)}
+                  >
+                    {/* Default state - thin line */}
+                    <div className={`absolute inset-x-2 h-px transition-all ${
+                      hoveredInsertIndex === index
+                        ? 'bg-indigo-400'
+                        : 'bg-gray-200 group-hover:bg-indigo-300'
+                    }`} />
+
+                    {/* Hover state - action buttons */}
+                    <div className={`flex items-center gap-1 bg-white rounded-lg shadow-sm border border-gray-200 px-1 py-0.5 transition-all z-10 ${
+                      hoveredInsertIndex === index
+                        ? 'opacity-100 scale-100'
+                        : 'opacity-0 scale-95 pointer-events-none'
+                    }`}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInsertAtIndex(index + 1);
+                          setShowInsertTransitionModal(true);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded transition-colors"
+                        title="Insert Transition"
+                      >
+                        <Zap className="w-3 h-3" />
+                        <span>Transition</span>
+                      </button>
+                      <div className="w-px h-4 bg-gray-200" />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInsertAtIndex(index + 1);
+                          setShowInsertShotModal(true);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
+                        title="Insert Shot"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Shot</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
         </div>
@@ -4277,6 +4541,24 @@ const SceneManager: React.FC<SceneManagerProps> = ({ projectId }) => {
           }}
         />
       )}
+
+      {/* Insert Transition Modal */}
+      <InsertTransitionModal
+        isOpen={showInsertTransitionModal}
+        onClose={() => setShowInsertTransitionModal(false)}
+        onInsert={handleInsertTransition}
+        previousSceneTitle={insertAtIndex > 0 ? scenes[insertAtIndex - 1]?.title : undefined}
+        nextSceneTitle={insertAtIndex < scenes.length ? scenes[insertAtIndex]?.title : undefined}
+      />
+
+      {/* Insert Shot Modal */}
+      <InsertShotModal
+        isOpen={showInsertShotModal}
+        onClose={() => setShowInsertShotModal(false)}
+        onInsert={handleInsertShot}
+        previousSceneTitle={insertAtIndex > 0 ? scenes[insertAtIndex - 1]?.title : undefined}
+        nextSceneTitle={insertAtIndex < scenes.length ? scenes[insertAtIndex]?.title : undefined}
+      />
     </div>
   );
 };
